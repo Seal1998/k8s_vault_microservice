@@ -14,7 +14,6 @@ from core.secret import Secret
 #system globals
 env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
-secrets_path = Path(env['SECRETS_PATH'])
 vault_address = env['VAULT_ADDR']
 vault_role = env['VAULT_ROLE']
 vault_path_file = env['VAULT_PATH_FILE']
