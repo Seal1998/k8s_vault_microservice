@@ -4,7 +4,7 @@ import yaml, json
 import logging
 from kubernetes import config, client, utils
 from pathlib import Path
-from core.helpers import base64_encode_string, get_pod_namespace
+from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt
 from core.hc_vault import get_vault_token, get_secret
 from core.secret import Secret
 
@@ -19,8 +19,6 @@ vault_address = env['VAULT_ADDR']
 vault_role = env['VAULT_ROLE']
 vault_path_file = env['VAULT_PATH_FILE']
 
-namespace = get_pod_namespace(non_k8s='default')
-
 #logs options
 formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
 formatter = logging.Formatter(formatter_string)
@@ -31,7 +29,12 @@ template_env = jinja2.Environment(loader=file_template_loader)
 secret_template = template_env.get_template('Secret.j2')
 
 #k8s globals
-config.load_kube_config()
+#config.load_kube_config()
+k8s_namespace = get_pod_namespace()
+k8s_jwt_token = get_pod_jwt()
+
+print(k8s_namespace)
+print(k8s_jwt_token)
 k8s_v1 = client.CoreV1Api()
 vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
 #vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
@@ -47,4 +50,4 @@ with open(vault_path_file, 'r') as hc_paths:
 
 for secret in secrets:
     for key, value in secret.items():
-        Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), namespace, k8s_v1)    
+        Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace, k8s_v1)    
