@@ -36,6 +36,7 @@ k8s_jwt_token = get_pod_jwt()
 k8s_configuration = client.Configuration()
 k8s_configuration.api_key['authorization'] = k8s_jwt_token
 k8s_configuration.host = 'https://{}'.format(k8s_host)
+k8s_configuration.ssl_ca_cert = '/run/secrets/kubernetes.io/serviceaccount/ca.crt'
 k8s_v1 = client.CoreV1Api(
     client.ApiClient(k8s_configuration)
 )
