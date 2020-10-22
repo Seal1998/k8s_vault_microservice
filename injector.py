@@ -14,7 +14,6 @@ from core.secret import Secret
 env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
 secrets_path = Path(env['SECRETS_PATH'])
-logs_path = Path(env['LOG_FILE_PATH'])
 vault_address = env['VAULT_ADDR']
 
 namespace = get_pod_namespace(non_k8s='default')
@@ -22,11 +21,7 @@ namespace = get_pod_namespace(non_k8s='default')
 #logs options
 formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
 formatter = logging.Formatter(formatter_string)
-logging.basicConfig(filename=logs_path, format=formatter_string, level=logging.INFO)
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setFormatter(formatter)
-root_logger = logging.getLogger()
-root_logger.addHandler(stdout_handler)
+logging.basicConfig(format=formatter_string, level=logging.INFO)
 
 
 #k8s globals
