@@ -31,7 +31,7 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
 k8s_v1 = client.CoreV1Api()
 vault_token_response = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
 
-print(vault_token_response)
+print(vault_token_response.text)
 
 file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
 template_env = jinja2.Environment(loader=file_template_loader)
