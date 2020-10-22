@@ -17,5 +17,5 @@ def get_pod_namespace():
 
 def get_pod_jwt():
     with open('/var/run/secrets/kubernetes.io/serviceaccount/token', 'r') as jwt_file:
-        jwt = ns_file.read()
+        jwt = jwt_file.read()
     return jwt
