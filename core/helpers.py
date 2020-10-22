@@ -13,7 +13,9 @@ def sort_dict_alphabetical_keys(dictionary):
 def get_pod_namespace():
     with open('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'r') as ns_file:
         namespace = ns_file.read()
+    return namespace
 
 def get_pod_jwt():
-    with open('/var/run/secrets/kubernetes.io/serviceaccount/token', 'r') as ns_file:
-        namespace = ns_file.read()
+    with open('/var/run/secrets/kubernetes.io/serviceaccount/token', 'r') as jwt_file:
+        jwt = ns_file.read()
+    return jwt
