@@ -33,8 +33,8 @@ secret_template = template_env.get_template('Secret.j2')
 #k8s globals
 config.load_kube_config()
 k8s_v1 = client.CoreV1Api()
-#vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
-vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
+vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
+#vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
 
 secrets = []
 
