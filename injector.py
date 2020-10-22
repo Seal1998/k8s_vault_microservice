@@ -15,6 +15,7 @@ env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
 secrets_path = Path(env['SECRETS_PATH'])
 logs_path = Path(env['LOG_FILE_PATH'])
+vault_address = env['VAULT_ADDR']
 
 namespace = get_pod_namespace(non_k8s='default')
 
