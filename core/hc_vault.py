@@ -5,4 +5,4 @@ def get_vault_token(vault_addr, k8s_role, auth_path='kubernetes'):
         jwt_token = token_file.read()
     auth_url = '{}/v1/auth/{}/login'.format(vault_addr, auth_path)
     token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token})
-    return token_responce
+    return token_responce['auth']['client_token']
