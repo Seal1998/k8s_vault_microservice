@@ -18,6 +18,7 @@ secrets_path = Path(env['SECRETS_PATH'])
 vault_address = env['VAULT_ADDR']
 vault_role = env['VAULT_ROLE']
 vault_path_file = env['VAULT_PATH_FILE']
+k8s_host = env['KUBERNETES_SERVICE_HOST']
 
 #logs options
 formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
@@ -32,10 +33,12 @@ secret_template = template_env.get_template('Secret.j2')
 #config.load_kube_config()
 k8s_namespace = get_pod_namespace()
 k8s_jwt_token = get_pod_jwt()
-
-print(k8s_namespace)
-print(k8s_jwt_token)
-k8s_v1 = client.CoreV1Api()
+k8s_configuration = client.Configuration()
+k8s_configuration.api_key['authorization'] = k8s_jwt_token
+k8s_configuration.host = 'https://{}'.format(k8s_host)
+k8s_v1 = client.CoreV1Api(
+    client.ApiClient(k8s_configuration)
+)
 vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
 #vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
 
