@@ -5,6 +5,7 @@ import logging
 from kubernetes import config, client, utils
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace
+from core.hc_vault import get_vault_token
 from core.secret import Secret
 
 
@@ -15,6 +16,7 @@ env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
 secrets_path = Path(env['SECRETS_PATH'])
 vault_address = env['VAULT_ADDR']
+vault_role = env['VAULT_ROLE']
 
 namespace = get_pod_namespace(non_k8s='default')
 
@@ -27,6 +29,9 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
 #k8s globals
 #config.load_kube_config()
 k8s_v1 = client.CoreV1Api()
+vault_token_response = get_vault_token(vault_addr=vault_address, role=vault_role)
+
+print(vault_token_response)
 
 file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
 template_env = jinja2.Environment(loader=file_template_loader)
