@@ -5,7 +5,7 @@ import logging
 from kubernetes import config, client, utils
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace
-from core.hc_vault import get_vault_token
+from core.hc_vault import get_vault_token, get_secret
 from core.secret import Secret
 
 
@@ -17,6 +17,7 @@ templates_path = Path(env['TEMPLATE_PATH'])
 secrets_path = Path(env['SECRETS_PATH'])
 vault_address = env['VAULT_ADDR']
 vault_role = env['VAULT_ROLE']
+vault_path_file = env['VAULT_PATH_FILE']
 
 namespace = get_pod_namespace(non_k8s='default')
 
@@ -25,25 +26,25 @@ formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
 formatter = logging.Formatter(formatter_string)
 logging.basicConfig(format=formatter_string, level=logging.INFO)
 
-
-#k8s globals
-#config.load_kube_config()
-k8s_v1 = client.CoreV1Api()
-vault_token_response = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
-
-print(vault_token_response)
-
 file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
 template_env = jinja2.Environment(loader=file_template_loader)
 secret_template = template_env.get_template('Secret.j2')
 
-k8s_rendered_secrets = []
+#k8s globals
+config.load_kube_config()
+k8s_v1 = client.CoreV1Api()
+#vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
+vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
 
-for secret in secrets_path.iterdir():
-    with open(secret, 'r') as stream:
-        secret_yml = yaml.safe_load(stream)
-        Secret(
-            yaml.safe_load(secret_template.render(secret_name=str(secret).split('/')[-1:][0], secrets_dict=secret_yml)),
-            namespace,
-            k8s_v1
-        )    
+secrets = []
+
+with open(vault_path_file, 'r') as hc_paths:
+    lines = hc_paths.readlines()
+    for path in lines:
+        path = path.strip()
+        secret = get_secret(vault_addr=vault_address, token=vault_token, path=path)
+        secrets.append(secret)
+
+for secret in secrets:
+    for key, value in secret.items():
+        Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), namespace, k8s_v1)    
