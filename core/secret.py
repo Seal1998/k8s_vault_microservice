@@ -45,6 +45,7 @@ class Secret:
                 print(err)
 
     def __check_secret(self):
+        api_secret = self.k8s_client.list_namespaced_secret(namespace=self.namespace)
         logging.info(' %s | Searching for existing secret', self.secret_name)
         try:
             api_secret = self.k8s_client.read_namespaced_secret(namespace=self.namespace, name=self.secret_name)
