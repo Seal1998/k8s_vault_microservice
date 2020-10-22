@@ -25,7 +25,7 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
 
 
 #k8s globals
-config.load_kube_config()
+#config.load_kube_config()
 k8s_v1 = client.CoreV1Api()
 
 file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
