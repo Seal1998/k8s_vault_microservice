@@ -29,7 +29,7 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
 #k8s globals
 #config.load_kube_config()
 k8s_v1 = client.CoreV1Api()
-vault_token_response = get_vault_token(vault_addr=vault_address, role=vault_role)
+vault_token_response = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
 
 print(vault_token_response)
 
