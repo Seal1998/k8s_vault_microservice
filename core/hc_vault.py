@@ -6,4 +6,5 @@ def get_vault_token(vault_addr, k8s_role, auth_path='kubernetes'):
     auth_url = '{}/v1/auth/{}/login'.format(vault_addr, auth_path)
     token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token})
     token_responce_dict = json.dumps(token_responce.text)
+    print(type(token_responce), type(token_responce_dict))
     return token_responce_dict
