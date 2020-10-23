@@ -16,8 +16,15 @@ env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
 vault_address = env['VAULT_ADDR']
 vault_role = env['VAULT_ROLE']
-vault_path_file = env['VAULT_PATH_FILE']
-k8s_host = env['KUBERNETES_SERVICE_HOST']
+vault_path_file = env['VAULT_PATHS_FILE']
+
+#non k8s dev args
+try:
+    dev_vault_token = env['DEV_VAULT_TOKEN']
+    dev_k8s_namespace = env['DEV_K8S_NS']
+    dev_mode = True
+except:
+    dev_mode = False
 
 #logs options
 formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
@@ -29,23 +36,27 @@ template_env = jinja2.Environment(loader=file_template_loader)
 secret_template = template_env.get_template('Secret.j2')
 
 #k8s globals
-#config.load_kube_config()
-config.load_incluster_config()
-k8s_namespace = get_pod_namespace()
-k8s_jwt_token = get_pod_jwt()
-k8s_v1 = client.CoreV1Api()
-vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role)
-#vault_token = 's.3e03uMMwGBSYPxuKUT0Y3Jtc'
+if dev_mode:
+    config.load_kube_config()
+    vault_token = dev_vault_token
+    k8s_namespace = dev_k8s_namespace
+else:
+    config.load_incluster_config()
+    k8s_namespace = get_pod_namespace()
+    k8s_jwt_token = get_pod_jwt()
+    #vault
+    vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role, jwt_token=k8s_jwt_token)
 
-secrets = []
+secrets = {}
+
+Secret.check_token_permissions(k8s_namespace, secret_template)
 
 with open(vault_path_file, 'r') as hc_paths:
-    lines = hc_paths.readlines()
-    for path in lines:
+    path_lines = hc_paths.readlines()
+    for path in path_lines:
         path = path.strip()
         secret = get_secret(vault_addr=vault_address, token=vault_token, path=path)
-        secrets.append(secret)
+        secrets = {**secrets, **secret}
 
-for secret in secrets:
-    for key, value in secret.items():
-        Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace, k8s_v1)    
+for key, value in secrets.items():
+    Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace)    
