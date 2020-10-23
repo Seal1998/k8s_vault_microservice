@@ -1,6 +1,30 @@
 import requests, json
 import logging
 
+def check_vault_connection(vault_addr):
+    try:
+        check_response = requests.get('{}/v1/sys/health'.format(vault_addr))
+        if check_response.status_code == 503:
+            logging.error('FATAL | Vault is sealed')
+            exit(1)
+        elif check_response.status_code == 501:
+            logging.error('FATAL | Vault not initialized')
+            exit(1)
+        elif check_response.status_code == 200:
+            logging.info('HVAULT | Connection - OK')
+    except requests.exceptions.ConnectionError as err:
+        logging.error('FATAL | Can`t connect to Vault \n\n {}'.format(err))
+        exit(1)
+
+def check_vault_token_policies(vault_addr, token):
+    token_info = requests.post('{}/v1/auth/token/lookup'.format(vault_addr), data={"token": token}, headers={'X-Vault-Token': token})
+    if token_info.status_code == 200:
+        logging.info('HVAULT | Token policies - %s', str(token_info.json()['data']['policies']))
+    elif token_info.status_code == 403:
+        logging.error('HVAULT | Token has no permissions to retrieve token info from auth/token/lookup')
+    else:
+        logging.error('HVAULT | Can`t retrieve policies for token due to \n%s', token_info.text)
+
 def get_vault_token(vault_addr, k8s_role, jwt_token, auth_path='kubernetes'):
     auth_url = '{}/v1/auth/{}/login'.format(vault_addr, auth_path)
     token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token})
@@ -49,7 +73,11 @@ def get_all_secrets_from_path(vault_addr, token, path, mounts_info=None):
 
 def get_mounts_info(vault_addr, token):
     logging.info('HVAULT | Getting mounts info...')
-    mounts_info = requests.get('{}/v1/sys/mounts'.format(vault_addr), headers={'X-Vault-Token': token}).json()
+    mounts_info_response = requests.get('{}/v1/sys/mounts'.format(vault_addr), headers={'X-Vault-Token': token})
+    mounts_info = mounts_info_response.json()
+    if mounts_info_response.status_code == 403:
+        logging.error('HVAULT | Token has no permissions to retrieve mounts info from sys/mounts')
+        exit(1)
     return mounts_info
 
 def get_kv_mount_version(vault_addr, token, kv_mount, mounts_info=None):

@@ -5,7 +5,7 @@ import logging
 from kubernetes import config, client, utils
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt
-from core.hc_vault import get_vault_token, get_secret
+from core.hc_vault import get_vault_token, get_secret, check_vault_connection, check_vault_token_policies
 from core.secret import Secret
 
 
@@ -50,13 +50,15 @@ else:
 secrets = {}
 
 Secret.check_token_permissions(k8s_namespace, secret_template)
+check_vault_connection(vault_addr=vault_address)
+check_vault_token_policies(vault_addr=vault_address, token=vault_token)
 
 with open(vault_path_file, 'r') as hc_paths:
     path_lines = hc_paths.readlines()
     for path in path_lines:
         path = path.strip()
-        secret = get_secret(vault_addr=vault_address, token=vault_token, path=path)
-        secrets = {**secrets, **secret}
+        new_secrets = get_secret(vault_addr=vault_address, token=vault_token, path=path)
+        secrets = {**secrets, **new_secrets}
 
 for key, value in secrets.items():
     Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace)    
