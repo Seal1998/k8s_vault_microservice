@@ -9,13 +9,13 @@ class vault_Secret:
     def __init__(self, kv_mount_path, kv_mountless_path):
         self.kv_mount_path = kv_mount_path
         self.kv_mountless_path = kv_mountless_path
-        self.secret_name = kv_mountless_path[-1:][0]
+        self.secret_name = kv_mountless_path.split('/')[-1:][0]
         self.kv_mount_version = self.mounts_info[f'{self.kv_mount_path}/']['options']['version']
         
         self.secret_data = self.__get_secret() #getting secret
 
     def __repr__(self):
-        return self.secret_data
+        return str(self.secret_data)
 
     def __get_secret(self):
         pull_api_endpoint = '/data/' if self.kv_mount_version == 2 else ''
@@ -68,6 +68,7 @@ class vault_Secret:
     @classmethod
     def prepare_connection(cls, vault_addres, vault_k8s_role=None, vault_token=None, k8s_jwt_token=None, auth_path=None):
         cls.vault_address = vault_addres
+        cls.check_vault_connection()
         logging.info('HVAULT | Getting vault token...')
         if not vault_token:
             #get token
@@ -77,6 +78,7 @@ class vault_Secret:
             cls.vault_token = token_responce_dict['auth']['client_token']
         else:
             cls.vault_token = vault_token
+        cls.check_vault_token_policies()
         #mounts info
         logging.info('HVAULT | Getting mounts info...')
         mounts_info_response = requests.get(f'{cls.vault_address}/v1/sys/mounts', headers={'X-Vault-Token': cls.vault_token})
@@ -86,28 +88,28 @@ class vault_Secret:
             exit(1)
         cls.mounts_info = mounts_info
 
-
-
-def check_vault_connection(vault_addr):
-    try:
-        check_response = requests.get('{}/v1/sys/health'.format(vault_addr))
-        if check_response.status_code == 503:
-            logging.error('FATAL | Vault is sealed')
+    @classmethod
+    def check_vault_connection(cls):
+        try:
+            check_response = requests.get(f'{cls.vault_address}/v1/sys/health')
+            if check_response.status_code == 503:
+                logging.error('FATAL | Vault is sealed')
+                exit(1)
+            elif check_response.status_code == 501:
+                logging.error('FATAL | Vault not initialized')
+                exit(1)
+            elif check_response.status_code == 200:
+                logging.info('HVAULT | Connection - OK')
+        except requests.exceptions.ConnectionError as err:
+            logging.error('FATAL | Can`t connect to Vault \n\n {}'.format(err))
             exit(1)
-        elif check_response.status_code == 501:
-            logging.error('FATAL | Vault not initialized')
-            exit(1)
-        elif check_response.status_code == 200:
-            logging.info('HVAULT | Connection - OK')
-    except requests.exceptions.ConnectionError as err:
-        logging.error('FATAL | Can`t connect to Vault \n\n {}'.format(err))
-        exit(1)
 
-def check_vault_token_policies(vault_addr, token):
-    token_info = requests.post('{}/v1/auth/token/lookup'.format(vault_addr), data={"token": token}, headers={'X-Vault-Token': token})
-    if token_info.status_code == 200:
-        logging.info('HVAULT | Token policies - %s', str(token_info.json()['data']['policies']))
-    elif token_info.status_code == 403:
-        logging.error('HVAULT | Token has no permissions to retrieve token info from auth/token/lookup')
-    else:
-        logging.error('HVAULT | Can`t retrieve policies for token due to \n%s', token_info.text)
+    @classmethod
+    def check_vault_token_policies(cls):
+        token_info = requests.post(f'{cls.vault_address}/v1/auth/token/lookup', data={"token": cls.vault_token}, headers={'X-Vault-Token': cls.vault_token})
+        if token_info.status_code == 200:
+            logging.info('HVAULT | Token policies - %s', str(token_info.json()['data']['policies']))
+        elif token_info.status_code == 403:
+            logging.error('HVAULT | Token has no permissions to retrieve token info from auth/token/lookup')
+        else:
+            logging.error('HVAULT | Can`t retrieve policies for token due to \n%s', token_info.text)

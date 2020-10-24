@@ -1,14 +1,19 @@
 import logging
 import yaml
+import jinja2
 from core.helpers import base64_encode_string, sort_dict_alphabetical_keys
 from kubernetes import client
 
+templates_path = './core/templates'
+
 class k8s_Secret:
-    def __init__(self, secret_yml_data, secret_namespace):
+    namespace = None
+    secret_template = None
+
+    def __init__(self, secret_yml_data):
         self.secret_yml_data = secret_yml_data
         self.secret_yml_data['data'] = sort_dict_alphabetical_keys(self.secret_yml_data['data'])
         self.secret_name = self.secret_yml_data['metadata']['name']
-        self.namespace = secret_namespace
         
         self.k8s_CoreV1_client = client.CoreV1Api()
         self.k8s_AuthenticationV1_client = client.AuthenticationV1Api()
@@ -21,29 +26,49 @@ class k8s_Secret:
             self.__create_secret()
 
     @classmethod
-    def check_token_permissions(cls, k8s_namespace, secret_template):
+    def prepare_connection(cls, namespace):
+        cls.namespace = namespace
+        cls.load_secret_template()
+        cls.check_token_permissions()
+
+    @classmethod
+    def load_secret_template(cls):
+        file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
+        template_env = jinja2.Environment(loader=file_template_loader)
+        cls.secret_template = template_env.get_template('Secret.j2')
+
+    @classmethod
+    def upload_vault_secret(cls, vault_secret):
+        logging.info(f'K8S | Uploading {vault_secret.secret_name} ...')
+        rendered_vault_secret_data = yaml.safe_load(
+            cls.secret_template.render(secret_name=vault_secret.secret_name, secrets_dict=vault_secret.secret_data)
+        )
+        cls(secret_yml_data=rendered_vault_secret_data)
+
+    @classmethod
+    def check_token_permissions(cls):
         logging.info('K8S | Checking token permissions for Secret resource...')
         try:
-            secrets = client.CoreV1Api().list_namespaced_secret(namespace=k8s_namespace)
+            secrets = client.CoreV1Api().list_namespaced_secret(namespace=cls.namespace)
             logging.info('K8S | LIST OK')
         except:
             logging.error('K8S | LIST - failed. Injector can`t list secrets')
             exit(1)
         try:
-            client.CoreV1Api().read_namespaced_secret(namespace=k8s_namespace, name=secrets.items[0].metadata.name)
+            client.CoreV1Api().read_namespaced_secret(namespace=cls.namespace, name=secrets.items[0].metadata.name)
             logging.info('K8S | READ - OK')
         except:
             logging.error('K8S | READ - failed. Injector can`t read secrets')
             exit(1)
         try:
-            test_yaml_secret = yaml.safe_load(secret_template.render(secret_name='test-injector-secret', secrets_dict={'test': 'secret'}))
-            cls(secret_yml_data=test_yaml_secret, secret_namespace=k8s_namespace)
+            test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name='test-injector-secret', secrets_dict={'test': 'secret'}))
+            cls(secret_yml_data=test_yaml_secret)
             logging.info('K8S | CREATE - OK')
         except:
             logging.error('K8S | CREATE - failed. Injector can`t create secrets')
             exit(1)
         try:
-            secrets = client.CoreV1Api().delete_namespaced_secret(namespace=k8s_namespace, name=test_yaml_secret['metadata']['name'])
+            secrets = client.CoreV1Api().delete_namespaced_secret(namespace=cls.namespace, name=test_yaml_secret['metadata']['name'])
             logging.info('K8S | DELETE - OK')
         except:
             logging.error('K8S | DELETE - failed. Injector can`t create secrets')
