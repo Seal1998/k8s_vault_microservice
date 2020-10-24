@@ -5,8 +5,8 @@ import logging
 from kubernetes import config, client, utils
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt
-from core.hc_vault import get_vault_token, get_secret, check_vault_connection, check_vault_token_policies
-from core.secret import Secret
+from core.vault_secret import vault_Secret
+from core.k8s_secret import k8s_Secret
 
 
 #TEMPLATE_PATH,SECRETS_PATH
@@ -15,6 +15,7 @@ from core.secret import Secret
 env = os.environ
 templates_path = Path(env['TEMPLATE_PATH'])
 vault_address = env['VAULT_ADDR']
+vautl_k8s_auth_mount = env['VAULT_K8S_AUTH_MOUNT']
 vault_role = env['VAULT_ROLE']
 vault_path_file = env['VAULT_PATHS_FILE']
 
@@ -40,25 +41,29 @@ if dev_mode:
     config.load_kube_config()
     vault_token = dev_vault_token
     k8s_namespace = dev_k8s_namespace
+    vault_Secret.prepare_connection(vault_address, vault_token=dev_vault_token)
 else:
     config.load_incluster_config()
     k8s_namespace = get_pod_namespace()
     k8s_jwt_token = get_pod_jwt()
     #vault
-    vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role, jwt_token=k8s_jwt_token)
+    vault_Secret.prepare_connection(vault_address, vault_role, k8s_jwt_token, auth_path=vautl_k8s_auth_mount)
+    #vault_token = get_vault_token(vault_addr=vault_address, k8s_role=vault_role, jwt_token=k8s_jwt_token, auth_path=vautl_k8s_auth_mount)
 
-secrets = {}
+vault_secrets = vault_Secret.pull_secrets('kubernetes/*')
+for secret in vault_secrets:
+    print(secret.secret_data)
 
-Secret.check_token_permissions(k8s_namespace, secret_template)
-check_vault_connection(vault_addr=vault_address)
-check_vault_token_policies(vault_addr=vault_address, token=vault_token)
+# k8s_Secret.check_token_permissions(k8s_namespace, secret_template)
+# check_vault_connection(vault_addr=vault_address)
+# check_vault_token_policies(vault_addr=vault_address, token=vault_token)
 
-with open(vault_path_file, 'r') as hc_paths:
-    path_lines = hc_paths.readlines()
-    for path in path_lines:
-        path = path.strip()
-        new_secrets = get_secret(vault_addr=vault_address, token=vault_token, path=path)
-        secrets = {**secrets, **new_secrets}
+# with open(vault_path_file, 'r') as hc_paths:
+#     path_lines = hc_paths.readlines()
+#     for path in path_lines:
+#         path = path.strip()
+#         new_secrets = get_secret(vault_addr=vault_address, token=vault_token, path=path)
+#         secrets = {**secrets, **new_secrets}
 
-for key, value in secrets.items():
-    Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace)    
+# for key, value in secrets.items():
+#     k8s_Secret(yaml.safe_load(secret_template.render(secret_name=key, secrets_dict=value)), k8s_namespace)    

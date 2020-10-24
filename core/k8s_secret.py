@@ -3,7 +3,7 @@ import yaml
 from core.helpers import base64_encode_string, sort_dict_alphabetical_keys
 from kubernetes import client
 
-class Secret:
+class k8s_Secret:
     def __init__(self, secret_yml_data, secret_namespace):
         self.secret_yml_data = secret_yml_data
         self.secret_yml_data['data'] = sort_dict_alphabetical_keys(self.secret_yml_data['data'])
@@ -20,8 +20,8 @@ class Secret:
         if self.__check_secret():
             self.__create_secret()
 
-    @staticmethod
-    def check_token_permissions(k8s_namespace, secret_template):
+    @classmethod
+    def check_token_permissions(cls, k8s_namespace, secret_template):
         logging.info('K8S | Checking token permissions for Secret resource...')
         try:
             secrets = client.CoreV1Api().list_namespaced_secret(namespace=k8s_namespace)
@@ -37,7 +37,7 @@ class Secret:
             exit(1)
         try:
             test_yaml_secret = yaml.safe_load(secret_template.render(secret_name='test-injector-secret', secrets_dict={'test': 'secret'}))
-            Secret(secret_yml_data=test_yaml_secret, secret_namespace=k8s_namespace)
+            cls(secret_yml_data=test_yaml_secret, secret_namespace=k8s_namespace)
             logging.info('K8S | CREATE - OK')
         except:
             logging.error('K8S | CREATE - failed. Injector can`t create secrets')
