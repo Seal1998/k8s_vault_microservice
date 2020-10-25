@@ -77,7 +77,11 @@ class vault_Secret:
             auth_url = f'{cls.vault_address}/v1/auth/{auth_path}/login'
             token_responce = requests.post(auth_url, data={"role": vault_k8s_role, "jwt": k8s_jwt_token})
             token_responce_dict = token_responce.json()
-            cls.vault_token = token_responce_dict['auth']['client_token']
+            try:
+                cls.vault_token = token_responce_dict['auth']['client_token']
+            except:
+                logging.error('HVAULT | Loggin error')
+                print(token_responce.text, token_responce_dict)
         else:
             cls.vault_token = vault_token
         cls.check_vault_token_policies()
