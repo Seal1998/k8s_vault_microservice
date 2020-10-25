@@ -36,7 +36,7 @@ class vault_Secret:
         try:
             kv_mount_version = cls.mounts_info[f'{kv_mount_path}/']['options']['version']
         except KeyError:
-            logging.error(f'HVAULT | No such kv engine - {kv_mount_path}')
+            logging.error(f'HVAULT | No such kv engine - {kv_mount_path}. Skipping...')
             return []
         if secret_name == '*':
             #list secrets
