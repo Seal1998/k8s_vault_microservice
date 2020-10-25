@@ -9,7 +9,7 @@ class vault_Secret:
     def __init__(self, kv_mount_path, kv_mountless_path):
         self.kv_mount_path = kv_mount_path
         self.kv_mountless_path = kv_mountless_path
-        self.secret_name = kv_mountless_path.split('/')[-1:][0]
+        self.secret_name = kv_mountless_path.split('/')[-1]
         self.kv_mount_version = self.mounts_info[f'{self.kv_mount_path}/']['options']['version']
         
         self.secret_data = self.__get_secret() #getting secret
@@ -37,7 +37,7 @@ class vault_Secret:
             kv_mount_version = cls.mounts_info[f'{kv_mount_path}/']['options']['version']
         except KeyError:
             logging.error(f'HVAULT | No such kv engine - {kv_mount_path}')
-            exit(1)
+            return []
         if secret_name == '*':
             #list secrets
             list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
