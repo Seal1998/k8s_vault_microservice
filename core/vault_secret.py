@@ -18,7 +18,7 @@ class vault_Secret:
         return str(self.secret_data)
 
     def __get_secret(self):
-        pull_api_endpoint = '/data/' if self.kv_mount_version == 2 else ''
+        pull_api_endpoint = '/data' if self.kv_mount_version == '2' else ''
         secret_response = requests.get(f'{self.vault_address}/v1/{self.kv_mount_path}{pull_api_endpoint}/{self.kv_mountless_path}', 
                                                                                     headers={'X-Vault-Token': self.vault_token})
         response_data = secret_response.json()['data'] if self.kv_mount_version == '1' else secret_response.json()['data']['data']
@@ -27,11 +27,12 @@ class vault_Secret:
     @classmethod
     def pull_secrets(cls, relative_path):
         full_path_parts = relative_path.split('/')
-        kv_mount_path = full_path_parts[:-1][0]
-        secret_name = full_path_parts[-1:][0]
+        kv_mount_path = full_path_parts[0]
+        secret_name = full_path_parts[-1]
         if secret_name == '*':
             full_path_parts = full_path_parts[:-1] # remove *
-        mountless_path = '/'.join(full_path_parts[1:]) if len(full_path_parts) > 1 else '' #e.q kv/dir1/dir2/* or kv/* can`t get slice
+        mountless_path = '/'.join(full_path_parts[1:])
+        #if len(full_path_parts) > 1 else '' #e.q kv/dir1/dir2/* or kv/* can`t get slice
         try:
             kv_mount_version = cls.mounts_info[f'{kv_mount_path}/']['options']['version']
         except KeyError:
@@ -39,7 +40,7 @@ class vault_Secret:
             exit(1)
         if secret_name == '*':
             #list secrets
-            list_api_endpoint = '/metadata/' if kv_mount_version == 2 else ''
+            list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
             logging.info(f"HVAULT | Listing secrets under {kv_mount_path}/{mountless_path} location")
             listed_secrets_response = requests.request('LIST', f'{cls.vault_address}/v1/{kv_mount_path}{list_api_endpoint}/{mountless_path}',
                                                                                                 headers={'X-Vault-Token': cls.vault_token})
@@ -48,6 +49,7 @@ class vault_Secret:
                 return []
             elif listed_secrets_response.status_code == 404:
                 logging.warning(f'HVAULT | No such location - {kv_mount_path}/{mountless_path}. Skipping...')
+                return []
             elif listed_secrets_response.status_code == 200:
                 listed_secrets = listed_secrets_response.json()['data']['keys']
 

@@ -37,7 +37,12 @@ else:
     k8s_namespace = get_pod_namespace()
     k8s_jwt_token = get_pod_jwt()
     #vault
-    vault_Secret.prepare_connection(vault_address, vault_role, k8s_jwt_token, auth_path=vautl_k8s_auth_mount)
+    vault_Secret.prepare_connection(
+        vault_addres=vault_address,
+        vault_k8s_role=vault_role,
+        k8s_jwt_token=k8s_jwt_token,
+        auth_path=vautl_k8s_auth_mount
+        )
 
 k8s_Secret.prepare_connection(k8s_namespace)
 
