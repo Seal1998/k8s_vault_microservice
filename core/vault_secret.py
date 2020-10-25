@@ -80,8 +80,9 @@ class vault_Secret:
             try:
                 cls.vault_token = token_responce_dict['auth']['client_token']
             except:
-                logging.error('HVAULT | Loggin error')
-                print(token_responce.text, token_responce_dict)
+                logging.error('HVAULT | Login error')
+                print(token_responce.text, token_responce_dict, f'{cls.vault_address}/v1/auth/{auth_path}/login')
+                exit(1)
         else:
             cls.vault_token = vault_token
         cls.check_vault_token_policies()
@@ -91,6 +92,9 @@ class vault_Secret:
         mounts_info = mounts_info_response.json()
         if mounts_info_response.status_code == 403:
             logging.error('HVAULT | Token has no permissions to retrieve mounts info from sys/mounts')
+            exit(1)
+        else:
+            logging.error('HVAULT | Can`t retrieve mounts info due to \n%s', mounts_info_response.text)
             exit(1)
         cls.mounts_info = mounts_info
 
