@@ -93,7 +93,7 @@ class vault_Secret:
         if mounts_info_response.status_code == 403:
             logging.error('HVAULT | Token has no permissions to retrieve mounts info from sys/mounts')
             exit(1)
-        else:
+        elif mounts_info_response.status_code != 200:
             logging.error('HVAULT | Can`t retrieve mounts info due to \n%s', mounts_info_response.text)
             exit(1)
         cls.mounts_info = mounts_info
