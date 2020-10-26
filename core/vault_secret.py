@@ -9,18 +9,30 @@ class vault_Secret:
     def __init__(self, kv_mount_path, kv_mountless_path):
         self.kv_mount_path = kv_mount_path
         self.kv_mountless_path = kv_mountless_path
+        self.kv_full_path = f'{self.kv_mount_path}/{self.kv_mountless_path}'
         self.secret_name = kv_mountless_path.split('/')[-1]
         self.kv_mount_version = self.mounts_info[f'{self.kv_mount_path}/']['options']['version']
         
+        self.status_code = None
         self.secret_data = self.__get_secret() #getting secret
 
     def __repr__(self):
         return str(self.secret_data)
 
     def __get_secret(self):
+        logging.info(f'HVAULT | Getting secret from {self.kv_full_path}...')
         pull_api_endpoint = '/data' if self.kv_mount_version == '2' else ''
         secret_response = requests.get(f'{self.vault_address}/v1/{self.kv_mount_path}{pull_api_endpoint}/{self.kv_mountless_path}', 
                                                                                     headers={'X-Vault-Token': self.vault_token})
+        if secret_response.status_code == 404:
+            logging.error(f'HVAULT | No such secret {self.kv_full_path}')
+            self.status_code = 404
+            return []
+        elif secret_response.status_code == 403:
+            logging.error(f'HVAULT | Token has no access to {self.kv_full_path}')
+            self.status_code = 403
+            return []
+        self.status_code = 200
         response_data = secret_response.json()['data'] if self.kv_mount_version == '1' else secret_response.json()['data']['data']
         return response_data
 
@@ -29,8 +41,8 @@ class vault_Secret:
         full_path_parts = relative_path.split('/')
         kv_mount_path = full_path_parts[0]
         secret_name = full_path_parts[-1]
-        if secret_name == '*':
-            full_path_parts = full_path_parts[:-1] # remove *
+        if secret_name in ('*', '+'):
+            full_path_parts = full_path_parts[:-1] # remove * +
         mountless_path = '/'.join(full_path_parts[1:])
         #if len(full_path_parts) > 1 else '' #e.q kv/dir1/dir2/* or kv/* can`t get slice
         try:
@@ -38,7 +50,7 @@ class vault_Secret:
         except KeyError:
             logging.error(f'HVAULT | No such kv engine - {kv_mount_path}. Skipping...')
             return []
-        if secret_name == '*':
+        if secret_name in ('*', '+'):
             #list secrets
             list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
             logging.info(f"HVAULT | Listing secrets under {kv_mount_path}/{mountless_path} location")
@@ -56,15 +68,22 @@ class vault_Secret:
             #recurse call to pull_secrets func
             secrets_list = []
             for secret in listed_secrets:
+                secret_postfix = f"{'*' if secret[-1] == '/' and secret_name == '*' else ''}"
                 secrets_list = [
                     *secrets_list,
-                    *cls.pull_secrets(f"{kv_mount_path}/{mountless_path}{'/' if mountless_path != '' else ''}{secret}{'*' if secret[-1:] == '/' else ''}")
+                    *cls.pull_secrets(f"{kv_mount_path}/{mountless_path}{'/' if mountless_path != '' else ''}{secret}{secret_postfix}")
                 ]
                 
             return secrets_list
         
         else:
-            return [cls(kv_mount_path, mountless_path),]
+            if secret_name == '': #case when kubernetes/+ (and for example dir/ was listed)
+                return []
+            new_secret_object = cls(kv_mount_path, mountless_path)
+            if new_secret_object.status_code == 200:
+                return [new_secret_object,]
+            else:
+                return []
             
     
     @classmethod
