@@ -99,8 +99,7 @@ class vault_Secret:
             try:
                 cls.vault_token = token_responce_dict['auth']['client_token']
             except:
-                logging.error('HVAULT | Login error')
-                print(token_responce.text, token_responce_dict, f'{cls.vault_address}/v1/auth/{auth_path}/login')
+                logging.error(f'HVAULT | Login error \n{token_responce.text}\n{token_responce_dict}\n{cls.vault_address}/v1/auth/{auth_path}/login')    
                 exit(1)
         else:
             cls.vault_token = vault_token

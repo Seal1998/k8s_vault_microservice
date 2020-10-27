@@ -9,39 +9,76 @@ templates_path = './core/templates'
 class k8s_Secret:
     namespace = None
     secret_template = None
+    vault_injector_id = 'main'
+    vault_injector_base_value = 'injector'
+    vault_injector_managed_value = None
+    vault_injector_created_value = None
+    secret_object_label = None
+    managed_secrets = {}
+    all_secrets = {}
+
+    #api objects
+    k8s_CoreV1_client = None #WTF
+    k8s_AuthenticationV1_client = None
 
     def __init__(self, secret_yml_data):
         self.secret_yml_data = secret_yml_data
         self.secret_yml_data['data'] = sort_dict_alphabetical_keys(self.secret_yml_data['data'])
         self.secret_name = self.secret_yml_data['metadata']['name']
-        
-        self.k8s_CoreV1_client = client.CoreV1Api()
-        self.k8s_AuthenticationV1_client = client.AuthenticationV1Api()
-        
+
+        #action flags
         self.secret_to_update = False
         self.secret_to_replace = False
+        self.secret_to_create = False
+        self.secret_to_skip = False
+
+        self.secret_is_valid = True
 
         self.__encode_values()
-        if self.__check_secret():
-            self.__create_secret()
+        self.__check_secret()
+        if not self.secret_to_skip and self.secret_is_valid:
+            self.__proceed_secret()
 
     @classmethod
-    def prepare_connection(cls, namespace):
+    def prepare_connection(cls, namespace, injector_id):
         cls.namespace = namespace
-        cls.load_secret_template()
-        cls.check_token_permissions()
+        cls.vault_injector_id = injector_id
+        cls.vault_injector_managed_value = f'{cls.vault_injector_base_value}-{cls.vault_injector_id}'#base part should be part of managed value (remove func)
+        cls.vault_injector_created_value = f'vault-{cls.vault_injector_base_value}'
+        cls.secret_object_label = f'managed-by={cls.vault_injector_managed_value}'
 
-    @classmethod
-    def load_secret_template(cls):
+        cls.k8s_CoreV1_client = client.CoreV1Api()
+
+        #prepare jinja2 template
         file_template_loader = jinja2.FileSystemLoader(searchpath=templates_path)
         template_env = jinja2.Environment(loader=file_template_loader)
         cls.secret_template = template_env.get_template('Secret.j2')
+
+        #get all secrets and vault managed
+        logging.info('K8S | Getting injector managed secrets...')
+        all_secrets_raw = cls.k8s_CoreV1_client.list_namespaced_secret(cls.namespace)
+        
+        #construct dicts of all and managed secrets where key - secret name and value - V1Secret
+        for secret in all_secrets_raw.items:
+            cls.all_secrets[secret.metadata.name] = secret
+            if secret.metadata.labels != None and \
+                                        'managed-by' in secret.metadata.labels.keys() and \
+                                        'created-by' in secret.metadata.labels.keys() and \
+                                        secret.metadata.labels['created-by'] == cls.vault_injector_created_value and \
+                                        secret.metadata.labels['managed-by'] == cls.vault_injector_managed_value:
+                cls.managed_secrets[secret.metadata.name] = secret
+
+        #construct dict of all secrets
+        cls.check_token_permissions()
+
 
     @classmethod
     def upload_vault_secret(cls, vault_secret):
         logging.info(f'K8S | Uploading {vault_secret.secret_name} ...')
         rendered_vault_secret_data = yaml.safe_load(
-            cls.secret_template.render(secret_name=vault_secret.secret_name, secrets_dict=vault_secret.secret_data)
+            cls.secret_template.render(secret_name=vault_secret.secret_name, secrets_dict=vault_secret.secret_data, injector_id=cls.vault_injector_id,
+                                        vault_injector_created_value=cls.vault_injector_created_value,
+                                        vault_injector_base_value=cls.vault_injector_base_value)
         )
         cls(secret_yml_data=rendered_vault_secret_data)
 
@@ -61,7 +98,11 @@ class k8s_Secret:
             logging.error('K8S | READ - failed. Injector can`t read secrets')
             exit(1)
         try:
-            test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name='test-injector-secret', secrets_dict={'test': 'secret'}))
+            test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name='test-injector-secret', 
+                                                                        secrets_dict={'test': 'secret'},
+                                                                        vault_injector_created_value=cls.vault_injector_created_value, 
+                                                                        vault_injector_base_value=cls.vault_injector_base_value,
+                                                                        injector_id=cls.vault_injector_id))
             cls(secret_yml_data=test_yaml_secret)
             logging.info('K8S | CREATE - OK')
         except:
@@ -78,7 +119,7 @@ class k8s_Secret:
         for key, value in self.secret_yml_data['data'].items():
             self.secret_yml_data['data'][key] = base64_encode_string(value).decode()
 
-    def __create_secret(self):
+    def __proceed_secret(self):
         if self.secret_to_replace:
             try:
                 self.k8s_CoreV1_client.replace_namespaced_secret(namespace=self.namespace, body=self.secret_yml_data, name=self.secret_name)
@@ -93,7 +134,7 @@ class k8s_Secret:
                                                     self.secret_name, ", ".join([key for key in self.secret_yml_data['data'].keys()]))
             except client.exceptions.ApiException as err:
                 print(err)    
-        else:
+        elif self.secret_to_create:
             try:
                 self.k8s_CoreV1_client.create_namespaced_secret(self.namespace, body=self.secret_yml_data)
                 logging.info('K8S | %s |  New Secret successfully created. Keys - %s', 
@@ -101,24 +142,68 @@ class k8s_Secret:
             except client.exceptions.ApiException as err:
                 print(err)
 
+    def __remove_candidate_for_deletion(self, k8s_secret_name):
+        if k8s_secret_name in k8s_Secret.managed_secrets.keys():
+            logging.info(f'K8S | Secret {k8s_secret_name} is managed by this injector instance')
+            del k8s_Secret.managed_secrets[k8s_secret_name]
+            return True
+        else:
+            non_managed_secret = k8s_Secret.all_secrets[k8s_secret_name]
+            non_managed_secret_labels = non_managed_secret.metadata.labels
+            if non_managed_secret_labels != None and 'created-by' in non_managed_secret_labels.keys():
+                if non_managed_secret_labels['created-by'] == self.vault_injector_created_value and \
+                    'managed-by' in non_managed_secret_labels.keys() and \
+                    self.vault_injector_base_value in non_managed_secret_labels['managed-by']:
+
+                    logging.warning(f'K8S | Secret {k8s_secret_name} is managed by another injector instance. Keeping old injector labels')
+                    self.secret_yml_data['metadata']['labels']['managed-by'] = non_managed_secret_labels['managed-by']
+                    #if skip - nothing will be done, if replace - old label will be kept, update - only body changes
+                else:
+                    logging.error(f'K8S | Secret {k8s_secret_name} has invalid created-by or managed-by label value. No actions will be performed')
+                    self.secret_is_valid = False
+            else:
+                logging.info(f'K8S | Secret {k8s_secret_name} do not manage by vault-injector. Injector labels will be added')
+                self.__label_secret_with_injector_keys(k8s_secret_name)
+                #Save old labels, add vault-injector labels
+    
+    def __label_secret_with_injector_keys(self, k8s_secret_name):
+        logging.info(f'K8S | Labeling secret {k8s_secret_name} with injector values')
+        unlabled_secret = self.all_secrets[k8s_secret_name]
+        self.k8s_CoreV1_client.patch_namespaced_secret(namespace=self.namespace, name=unlabled_secret.metadata.name, 
+                                                                                    body={'metadata': {
+                                                                                            'labels': {
+                                                                                                'created-by': self.vault_injector_created_value,
+                                                                                                'managed-by': self.vault_injector_managed_value
+                                                                                                        }
+                                                                                                    }
+                                                                                        })
+    @classmethod
+    def remove_untrackable_secrets(cls):
+        for secret in cls.managed_secrets.keys():
+            logging.info(f'K8S | Removing {secret} secret from k8s because it was deleted from Vault or path map')
+            try:
+                cls.k8s_CoreV1_client.delete_namespaced_secret(namespace=cls.namespace, name=secret)
+            except client.exceptions.ApiException as err:
+                print(err)
+
     def __check_secret(self):
-        api_secret = self.k8s_CoreV1_client.list_namespaced_secret(namespace=self.namespace)
         logging.info('K8S | %s | Searching for existing secret', self.secret_name)
-        try:
-            api_secret = self.k8s_CoreV1_client.read_namespaced_secret(namespace=self.namespace, name=self.secret_name)
+        if self.secret_name in self.all_secrets.keys():
             logging.warning('K8S | %s | Secret exist. Checking values...', self.secret_name)
-            if api_secret.data != self.secret_yml_data['data']:
-                if len(api_secret.data) != len(self.secret_yml_data['data']):
-                    logging.info('K8S | %s | Data block of original secret has different size. Replacing secret...', self.secret_name)
+            existing_secret = self.all_secrets[self.secret_name]
+            if existing_secret.data != self.secret_yml_data['data']:
+                if len(existing_secret.data) != len(self.secret_yml_data['data']):
+                    logging.info('K8S | %s | Data block of original secret has different size. Secret will be replaced', self.secret_name)
+                    self.__remove_candidate_for_deletion(existing_secret.metadata.name)
                     self.secret_to_replace = True
                 else:
-                    logging.info('K8S | %s | Secrets values didn`t match. Updating secret...', self.secret_name)
+                    logging.info('K8S | %s | Secrets values didn`t match. Secret will be updated', self.secret_name)
+                    self.__remove_candidate_for_deletion(existing_secret.metadata.name)
                     self.secret_to_update = True
-                return True
             else:
-                logging.info('K8S | %s | Secrets values are equel.Skipping...', self.secret_name)
-                return False
-        except client.exceptions.ApiException as err:
-            if 'NotFound' in str(err):
-                logging.info('K8S | %s | Secret doesn`t exist yet. Creating...', self.secret_name)
-                return True
+                logging.info('K8S | %s | Secrets values are equal. Secret will be skipped', self.secret_name)
+                self.__remove_candidate_for_deletion(existing_secret.metadata.name)
+                self.secret_to_skip = True
+        else:
+            logging.info('K8S | %s | Secret doesn`t exist yet. Creating...', self.secret_name)
+            self.secret_to_create = True

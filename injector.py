@@ -12,6 +12,7 @@ vault_address = env['VAULT_ADDR']
 vautl_k8s_auth_mount = env['VAULT_K8S_AUTH_MOUNT']
 vault_role = env['VAULT_ROLE']
 vault_path_file = env['VAULT_PATHS_FILE']
+vault_injector_id = env['VAULT_INJECTOR_ID']
 
 #non k8s dev args
 try:
@@ -44,7 +45,7 @@ else:
         auth_path=vautl_k8s_auth_mount
         )
 
-k8s_Secret.prepare_connection(k8s_namespace)
+k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
 
 secrets = []
 
@@ -56,4 +57,5 @@ with open(vault_path_file, 'r') as hc_paths:
         secrets = [*secrets, *new_secrets]
 
 #creating k8s secrets
-list(map(k8s_Secret.upload_vault_secret, secrets))  
+list(map(k8s_Secret.upload_vault_secret, secrets))
+k8s_Secret.remove_untrackable_secrets()
