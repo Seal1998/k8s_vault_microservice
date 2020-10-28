@@ -4,7 +4,7 @@ import logging
 class vault_Secret:
     vault_address = None
     vault_token = None
-    mounts_info = None
+    mounts_info = []
 
     def __init__(self, kv_mount_path, kv_mountless_path):
         self.kv_mount_path = kv_mount_path
