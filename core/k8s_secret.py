@@ -1,19 +1,16 @@
 import logging
 import yaml
 import jinja2
-from core.helpers import base64_encode_string, sort_dict_alphabetical_keys
+from .helpers import base64_encode_string, sort_dict_alphabetical_keys
 from kubernetes import client
 
 templates_path = './core/templates'
+
 
 class k8s_Secret:
     namespace = None
     secret_template = None
     vault_injector_id = 'main'
-    vault_injector_base_value = 'injector'
-    vault_injector_managed_value = None
-    vault_injector_created_value = None
-    secret_object_label = None
     managed_secrets = {}
     all_secrets = {}
 
@@ -43,9 +40,6 @@ class k8s_Secret:
     def prepare_connection(cls, namespace, injector_id):
         cls.namespace = namespace
         cls.vault_injector_id = injector_id
-        cls.vault_injector_managed_value = f'{cls.vault_injector_base_value}-{cls.vault_injector_id}'#base part should be part of managed value (remove func)
-        cls.vault_injector_created_value = f'vault-{cls.vault_injector_base_value}'
-        cls.secret_object_label = f'managed-by={cls.vault_injector_managed_value}'
 
         cls.k8s_CoreV1_client = client.CoreV1Api()
 
@@ -62,10 +56,8 @@ class k8s_Secret:
         for secret in all_secrets_raw.items:
             cls.all_secrets[secret.metadata.name] = secret
             if secret.metadata.labels != None and \
-                                        'managed-by' in secret.metadata.labels.keys() and \
-                                        'created-by' in secret.metadata.labels.keys() and \
-                                        secret.metadata.labels['created-by'] == cls.vault_injector_created_value and \
-                                        secret.metadata.labels['managed-by'] == cls.vault_injector_managed_value:
+                    'vault-injector' in secret.metadata.labels.keys() and \
+                    secret.metadata.labels['vault-injector'] == cls.vault_injector_id:
                 cls.managed_secrets[secret.metadata.name] = secret
 
         #construct dict of all secrets
@@ -76,9 +68,11 @@ class k8s_Secret:
     def upload_vault_secret(cls, vault_secret):
         logging.info(f'K8S | Uploading {vault_secret.secret_name} ...')
         rendered_vault_secret_data = yaml.safe_load(
-            cls.secret_template.render(secret_name=vault_secret.secret_name, secrets_dict=vault_secret.secret_data, injector_id=cls.vault_injector_id,
-                                        vault_injector_created_value=cls.vault_injector_created_value,
-                                        vault_injector_base_value=cls.vault_injector_base_value)
+            cls.secret_template.render(
+                                    secret_name=vault_secret.secret_name, 
+                                    secrets_dict=vault_secret.secret_data,
+                                    injector_id=cls.vault_injector_id
+                                    )
         )
         cls(secret_yml_data=rendered_vault_secret_data)
 
@@ -100,8 +94,6 @@ class k8s_Secret:
         try:
             test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name='test-injector-secret', 
                                                                         secrets_dict={'test': 'secret'},
-                                                                        vault_injector_created_value=cls.vault_injector_created_value, 
-                                                                        vault_injector_base_value=cls.vault_injector_base_value,
                                                                         injector_id=cls.vault_injector_id))
             cls(secret_yml_data=test_yaml_secret)
             logging.info('K8S | CREATE - OK')
@@ -142,7 +134,7 @@ class k8s_Secret:
             except client.exceptions.ApiException as err:
                 print(err)
 
-    def __remove_candidate_for_deletion(self, k8s_secret_name):
+    def __remove_candidate_for_deletion(self, k8s_secret_name, policy='default'):
         if k8s_secret_name in k8s_Secret.managed_secrets.keys():
             logging.info(f'K8S | Secret {k8s_secret_name} is managed by this injector instance')
             del k8s_Secret.managed_secrets[k8s_secret_name]
@@ -150,32 +142,30 @@ class k8s_Secret:
         else:
             non_managed_secret = k8s_Secret.all_secrets[k8s_secret_name]
             non_managed_secret_labels = non_managed_secret.metadata.labels
-            if non_managed_secret_labels != None and 'created-by' in non_managed_secret_labels.keys():
-                if non_managed_secret_labels['created-by'] == self.vault_injector_created_value and \
-                    'managed-by' in non_managed_secret_labels.keys() and \
-                    self.vault_injector_base_value in non_managed_secret_labels['managed-by']:
-
-                    logging.warning(f'K8S | Secret {k8s_secret_name} is managed by another injector instance. Keeping old injector labels')
-                    self.secret_yml_data['metadata']['labels']['managed-by'] = non_managed_secret_labels['managed-by']
+            if non_managed_secret_labels != None and \
+                'vault-injector' in non_managed_secret_labels.keys():
+                    another_injector_id = non_managed_secret_labels['vault-injector']
+                    if policy == 'default':
+                        logging.warning(f'K8S | Secret {k8s_secret_name} is managed by injector instance with id [{another_injector_id}]. Keeping old injector label')
+                        self.secret_yml_data['metadata']['labels']['managed-by'] = non_managed_secret_labels['vault-injector']
+                    elif policy == 'agressive':
+                        logging.warning(f'K8S | Relabeling {k8s_secret_name} because of agressive policy - [{another_injector_id} -> {self.vault_injector_id}]')
+                        self.__label_secret_with_injector_key(k8s_secret_name)
                     #if skip - nothing will be done, if replace - old label will be kept, update - only body changes
-                else:
-                    logging.error(f'K8S | Secret {k8s_secret_name} has invalid created-by or managed-by label value. No actions will be performed')
-                    self.secret_is_valid = False
             else:
                 logging.info(f'K8S | Secret {k8s_secret_name} do not manage by vault-injector. Injector labels will be added')
-                self.__label_secret_with_injector_keys(k8s_secret_name)
+                self.__label_secret_with_injector_key(k8s_secret_name)
                 #Save old labels, add vault-injector labels
     
-    def __label_secret_with_injector_keys(self, k8s_secret_name):
+    def __label_secret_with_injector_key(self, k8s_secret_name):
         logging.info(f'K8S | Labeling secret {k8s_secret_name} with injector values')
         unlabled_secret = self.all_secrets[k8s_secret_name]
         self.k8s_CoreV1_client.patch_namespaced_secret(namespace=self.namespace, name=unlabled_secret.metadata.name, 
-                                                                                    body={'metadata': {
-                                                                                            'labels': {
-                                                                                                'created-by': self.vault_injector_created_value,
-                                                                                                'managed-by': self.vault_injector_managed_value
-                                                                                                        }
+                                                                                body={'metadata': {
+                                                                                        'labels': {
+                                                                                            'vault-injector': self.vault_injector_id
                                                                                                     }
+                                                                                                }
                                                                                         })
     @classmethod
     def remove_untrackable_secrets(cls):
