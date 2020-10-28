@@ -10,7 +10,7 @@ templates_path = './core/templates'
 class k8s_Secret:
     namespace = None
     secret_template = None
-    vault_injector_id = 'main'
+    vault_injector_id = None
     managed_secrets = {}
     all_secrets = {}
 
@@ -39,7 +39,12 @@ class k8s_Secret:
     @classmethod
     def prepare_connection(cls, namespace, injector_id):
         cls.namespace = namespace
-        cls.vault_injector_id = injector_id
+        # if vault injector value not provided, namespace name will be used
+        if injector_id is None:
+            logging.info(f'SYSTEM | Injector id not defined. ID will be set to namespace name')
+            cls.vault_injector_id = namespace
+        else:
+            cls.vault_injector_id = injector_id
 
         cls.k8s_CoreV1_client = client.CoreV1Api()
 

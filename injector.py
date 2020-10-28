@@ -15,11 +15,11 @@ def load_environment():
 
     required_vars = [
                         'VAULT_ADDR',
-                        'VAULT_K8S_AUTH_MOUNT',
                         'VAULT_ROLE'
                     ]
     optional_vars = [
-                        'VAULT_INJECTOR_ID'
+                        'VAULT_INJECTOR_ID',
+                        'VAULT_K8S_AUTH_MOUNT'
                     ]
     path_source_vars = [
                         'VAULT_PATHS_FILE', 
@@ -34,11 +34,11 @@ def load_environment():
         logging.error(f'SYSTEM | Not all required env vars defined {required_vars}')
         exit(1)
 
-    if 'VAULT_INJECTOR_ID' in env.keys():
-        variables.append(env['VAULT_INJECTOR_ID'])
-    else:
-        logging.error(f'SYSTEM | Injector id not defined. ID will be set to namespace name')
-        variables.append(None)
+    for optional_var in optional_vars:
+        if optional_var not in env.keys():
+            variables.append(None)
+        else:
+            variables.append(env[optional_var])
 
     if all(env_var in env.keys() for env_var in path_source_vars):
         logging.error('SYSTEM | Can`t use several path sources. Specify VAULT_PATHS_FILE or VAULT_PATHS_SECRET')
@@ -71,9 +71,9 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
 
 [
     vault_address,
-    vautl_k8s_auth_mount,
     vault_role,
     vault_injector_id,
+    vault_k8s_auth_mount,
     paths_source        ] = load_environment()
 
 #k8s vault globals
@@ -91,12 +91,8 @@ else:
         vault_addres=vault_address,
         vault_k8s_role=vault_role,
         k8s_jwt_token=k8s_jwt_token,
-        auth_path=vautl_k8s_auth_mount
+        auth_path=vault_k8s_auth_mount
         )
-
-# if vault injector value not provided, namespace name will be used
-if vault_injector_id is None:
-    vault_injector_id = k8s_namespace
 
 k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
 

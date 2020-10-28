@@ -90,6 +90,9 @@ class vault_Secret:
     def prepare_connection(cls, vault_addres, vault_k8s_role=None, vault_token=None, k8s_jwt_token=None, auth_path=None):
         cls.vault_address = vault_addres
         cls.check_vault_connection()
+        if auth_path is None:
+            logging.warning('SYSTEM | Vault kubernetes mount path not provided. Default will be used')
+            auth_path = 'kubernetes'
         logging.info('HVAULT | Getting vault token...')
         if not vault_token:
             #get token
