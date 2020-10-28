@@ -65,7 +65,6 @@ class k8s_Secret:
                     secret.metadata.labels['vault-injector'] == cls.vault_injector_id:
                 cls.managed_secrets[secret.metadata.name] = secret
 
-        #construct dict of all secrets
         cls.check_token_permissions()
 
 
@@ -102,7 +101,7 @@ class k8s_Secret:
             logging.error('K8S | READ - failed. Injector can`t read secrets')
             exit(1)
         try:
-            test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name='test-injector-secret', 
+            test_yaml_secret = yaml.safe_load(cls.secret_template.render(secret_name=f'test-injector-secret-{cls.vault_injector_id}', 
                                                                         secrets_dict={'test': 'secret'},
                                                                         injector_id=cls.vault_injector_id))
             cls(secret_yml_data=test_yaml_secret)
