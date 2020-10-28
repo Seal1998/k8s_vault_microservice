@@ -67,6 +67,11 @@ class k8s_Secret:
     @classmethod
     def upload_vault_secret(cls, vault_secret):
         logging.info(f'K8S | Uploading {vault_secret.secret_name} ...')
+        #check types
+        str_type_check = all(type(value) is str for value in vault_secret.secret_data.values())
+        if not str_type_check:
+            logging.error(f'K8S | Not all values of [{vault_secret.kv_full_path}] secret has str type. Aborting upload')
+            return False
         rendered_vault_secret_data = yaml.safe_load(
             cls.secret_template.render(
                                     secret_name=vault_secret.secret_name, 
@@ -170,7 +175,7 @@ class k8s_Secret:
     @classmethod
     def remove_untrackable_secrets(cls):
         for secret in cls.managed_secrets.keys():
-            logging.info(f'K8S | Removing {secret} secret from k8s because it was deleted from Vault or path map')
+            logging.info(f'K8S | Removing {secret} secret from k8s because it was deleted from Vault or paths map')
             try:
                 cls.k8s_CoreV1_client.delete_namespaced_secret(namespace=cls.namespace, name=secret)
             except client.exceptions.ApiException as err:
