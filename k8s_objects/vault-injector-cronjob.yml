@@ -1,0 +1,41 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: vault-secrets-injector
+spec:
+  schedule: "*/1 * * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: vault-injector
+          restartPolicy: Never
+          containers:
+            - name: vault-k8s-secrets-injector
+              image: meksvinz/k8s_vault:1.4.0
+              workingDir: /injector 
+              env:
+                - name: VAULT_ADDR
+                  value: "http://172.17.0.2:8200"
+                - name: VAULT_ROLE
+                  value: "k8s_test"
+                - name: VAULT_PATHS_SECRET
+                  value: "kubernetes/paths"
+#     In order to use config map as paths source, replace VAULT_PATHS_SECRET with:
+#
+#               - name: VAULT_PATHS_FILE
+#                 value: "/injector/config/paths"
+#             volumeMounts:
+#               - name: injector-paths
+#                 mountPath: "/injector/config"
+#                 readOnly: true
+#         volumes:
+#           - name: injector-paths
+#             configMap:
+#               name: vault-injector-paths
+#               items:
+#               - key: "hc-paths"
+#                 path: "paths"
