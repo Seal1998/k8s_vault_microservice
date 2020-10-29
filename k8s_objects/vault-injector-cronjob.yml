@@ -15,7 +15,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: vault-k8s-secrets-injector
-              image: meksvinz/vault-injector:2.0.1
+              image: meksvinz/vault-injector:2.0.2
               workingDir: /injector 
               env:
                 - name: VAULT_ADDR
@@ -23,7 +23,7 @@ spec:
                 - name: VAULT_ROLE
                   value: "k8s_test"
                 - name: VAULT_PATHS_SECRET
-                  value: "kubernetes/paths"
+                  value: "kubernetes/kubernetes/injector-paths"
 #     In order to use config map as paths source, replace VAULT_PATHS_SECRET with:
 #
 #               - name: VAULT_PATHS_FILE

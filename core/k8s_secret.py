@@ -54,6 +54,8 @@ class k8s_Secret:
         template_env = jinja2.Environment(loader=file_template_loader)
         cls.secret_template = template_env.get_template('Secret.j2')
 
+        cls.check_token_permissions()
+
         #get all secrets and vault managed
         logging.info('K8S | Getting injector managed secrets...')
         all_secrets_raw = cls.k8s_CoreV1_client.list_namespaced_secret(cls.namespace)
@@ -65,8 +67,6 @@ class k8s_Secret:
                     'vault-injector' in secret.metadata.labels.keys() and \
                     secret.metadata.labels['vault-injector'] == cls.vault_injector_id:
                 cls.managed_secrets[secret.metadata.name] = secret
-
-        cls.check_token_permissions()
 
 
     @classmethod
