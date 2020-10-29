@@ -109,10 +109,12 @@ if paths_source.path_file:
 
 elif paths_source.vault_secret:
     logging.info('SYSTEM | Loading secrets via Vault secret paths source')
-    path_secret = vault_Secret.pull_secrets(paths_source.path)[0]
-    if not path_secret.secret_data:
+    path_secret = vault_Secret.pull_secrets(paths_source.path)
+    if not path_secret:
         logging.error('SYSTEM | Cannot pull paths from Vault')
         exit(1)
+    else:
+        path_secret = path_secret[0]
     secret_paths = path_secret.secret_data['vault-injector-paths']
     for path in secret_paths:
         new_secrets = vault_Secret.pull_secrets(path)
