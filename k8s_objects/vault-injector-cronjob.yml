@@ -15,7 +15,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: vault-k8s-secrets-injector
-              image: meksvinz/k8s_vault:1.4.0
+              image: meksvinz/vault-injector:2.0.0
               workingDir: /injector 
               env:
                 - name: VAULT_ADDR
