@@ -1,6 +1,7 @@
 import logging
 import yaml
 import jinja2
+import re
 from .helpers import base64_encode_string, sort_dict_alphabetical_keys
 from kubernetes import client
 
@@ -76,6 +77,19 @@ class k8s_Secret:
         if not str_type_check:
             logging.error(f'K8S | Not all values of [{vault_secret.kv_full_path}] secret has str type. Aborting upload')
             return False
+
+        #check for dns valid name
+        dns_match = re.fullmatch('([a-zA-Z\d]+[\.-]{0,1})+[a-zA-Z\d]+', vault_secret.secret_name)
+        if dns_match is None:
+            logging.error(f'HVAULT | Secret [{vault_secret.secret_name}] has invalid dns name. Aborting upload')
+            return False
+        
+        #check keys
+        keys_check = all(re.fullmatch('([\w]+[\.-]{0,1})+[\w]+', key) for key in vault_secret.secret_data.keys())
+        if not keys_check:
+            logging.error(f'K8S | Not all keys of [{vault_secret.kv_full_path}] secret are valid. Aborting upload')
+            return False
+
         rendered_vault_secret_data = yaml.safe_load(
             cls.secret_template.render(
                                     secret_name=vault_secret.secret_name, 
