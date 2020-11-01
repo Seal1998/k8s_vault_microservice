@@ -16,8 +16,12 @@ class vault_Secret:
         self.status_code = None
         self.secret_data = self.__get_secret() #getting secret
 
+        # secret marked as invalid if it contains non k8s keys or invalid value type or non dns name
+        self.invalid = False
+        self.invalid_reason = None
+
     def __repr__(self):
-        return str(self.secret_data)
+        return str({self.secret_name: self.secret_data})
 
     def __get_secret(self):
         logging.info(f'HVAULT | Getting secret from {self.kv_full_path}...')
@@ -25,13 +29,13 @@ class vault_Secret:
         secret_response = requests.get(f'{self.vault_address}/v1/{self.kv_mount_path}{pull_api_endpoint}/{self.kv_mountless_path}', 
                                                                                     headers={'X-Vault-Token': self.vault_token})
         if secret_response.status_code == 404:
-            logging.error(f'HVAULT | No such secret {self.kv_full_path}')
+            logging.warning(f'HVAULT | No such secret {self.kv_full_path}. Skipping')
             self.status_code = 404
-            return []
+            return False
         elif secret_response.status_code == 403:
             logging.error(f'HVAULT | Token has no access to {self.kv_full_path}')
             self.status_code = 403
-            return []
+            return False
         self.status_code = 200
         response_data = secret_response.json()['data'] if self.kv_mount_version == '1' else secret_response.json()['data']['data']
         return response_data
@@ -58,32 +62,37 @@ class vault_Secret:
                                                                                                 headers={'X-Vault-Token': cls.vault_token})
             if listed_secrets_response.status_code == 403:
                 logging.warning(f'HVAULT | Token has no permissions to access {kv_mount_path}/{mountless_path}. Skipping...')
-                return []
+                return False
             elif listed_secrets_response.status_code == 404:
                 logging.warning(f'HVAULT | No such location - {kv_mount_path}/{mountless_path}. Skipping...')
-                return []
+                return False
             elif listed_secrets_response.status_code == 200:
                 listed_secrets = listed_secrets_response.json()['data']['keys']
 
             #recurse call to pull_secrets func
-            secrets_list = []
-            for secret in listed_secrets:
-                secret_postfix = f"{'*' if secret[-1] == '/' and secret_name == '*' else ''}"
-                secrets_list = [
-                    *secrets_list,
-                    *cls.pull_secrets(f"{kv_mount_path}/{mountless_path}{'/' if mountless_path != '' else ''}{secret}{secret_postfix}")
-                ]
-                
-            return secrets_list
+            
+            def path_from_listed_secret(listed_secret):
+                secret_postfix = f"{'*' if listed_secret[-1] == '/' else ''}"
+                secret_path = f"{kv_mount_path}/{mountless_path}{'/' if mountless_path != '' else ''}{listed_secret}{secret_postfix}"
+                return secret_path
+            
+            listed_secrets_paths = tuple(map(path_from_listed_secret, listed_secrets))
+            listed_wildcard_paths = tuple(filter(lambda path: path[-1]=='*', listed_secrets_paths))
+            listed_casual_paths = tuple(filter(lambda path: path[-1] != '*', listed_secrets_paths))
+            secrets_obj = tuple(map(vault_Secret.pull_secrets, listed_casual_paths))
+            if secret_name == '*' and listed_wildcard_paths:
+                secrets_wildcard_obj = tuple(map(cls.pull_secrets, listed_wildcard_paths))
+                wildcard_secrets = tuple(i for subtuple in secrets_wildcard_obj for i in subtuple)
+                secrets_obj = (*secrets_obj, *wildcard_secrets)           
+            
+            return secrets_obj
         
         else:
-            if secret_name == '': #case when kubernetes/+ (and for example dir/ was listed)
-                return []
             new_secret_object = cls(kv_mount_path, mountless_path)
             if new_secret_object.status_code == 200:
-                return [new_secret_object,]
+                return new_secret_object
             else:
-                return []
+                return False
             
     
     @classmethod

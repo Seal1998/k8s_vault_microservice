@@ -3,7 +3,7 @@ import logging
 from collections import namedtuple
 from kubernetes import config, client
 from pathlib import Path
-from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt
+from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt, validate_vault_secret
 from core import vault_Secret
 from core import k8s_Secret
 
@@ -101,11 +101,8 @@ vault_secrets = []
 if paths_source.path_file:
     logging.info('SYSTEM | Loading secrets via file paths source')
     with open(paths_source.path, 'r') as hc_paths:
-        path_lines = hc_paths.readlines()
-        for path in path_lines:
-            path = path.strip()
-            new_secrets = vault_Secret.pull_secrets(path)
-            vault_secrets = [*vault_secrets, *new_secrets]
+        secret_paths = (path.strip() for path in hc_paths.readlines())
+        vault_secrets_raw = map(vault_Secret.pull_secrets, secret_paths)
 
 elif paths_source.vault_secret:
     logging.info('SYSTEM | Loading secrets via Vault secret paths source')
@@ -114,12 +111,17 @@ elif paths_source.vault_secret:
         logging.error('SYSTEM | Cannot pull paths from Vault')
         exit(1)
     else:
-        path_secret = path_secret[0]
+        path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
-    for path in secret_paths:
-        new_secrets = vault_Secret.pull_secrets(path)
-        vault_secrets = [*vault_secrets, *new_secrets]
+    vault_secrets_raw = map(vault_Secret.pull_secrets, secret_paths)
+
+#I`m really sorry for the below generator. Basically it`s iterate over tuples inside vault_secrets_raw tuple
+#If tuple is False - it`s mean that secret did`n exist and generator handle that
+vault_secrets = tuple(secret for subtuple in vault_secrets_raw if subtuple is not False for secret in subtuple)
+#filter vault secrets
+valid_vault_secrets = tuple(filter(validate_vault_secret, vault_secrets)) #set invalid flags and invalid reasons
+invalid_vault_secrets = tuple(filter(lambda v_secret: v_secret.invalid is True, vault_secrets))
 
 #creating k8s secrets from vault objects
-list(map(k8s_Secret.upload_vault_secret, vault_secrets))
+list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))
 k8s_Secret.remove_untrackable_secrets()
