@@ -101,8 +101,7 @@ vault_secrets = []
 if paths_source.path_file:
     logging.info('SYSTEM | Loading secrets via file paths source')
     with open(paths_source.path, 'r') as hc_paths:
-        secret_paths = (path.strip() for path in hc_paths.readlines())
-        vault_secrets_raw = map(vault_Secret.pull_secrets, secret_paths)
+        secret_paths = tuple(path.strip() for path in hc_paths.readlines())
 
 elif paths_source.vault_secret:
     logging.info('SYSTEM | Loading secrets via Vault secret paths source')
@@ -113,14 +112,24 @@ elif paths_source.vault_secret:
     else:
         path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
-    vault_secrets_raw = map(vault_Secret.pull_secrets, secret_paths)
 
-#I`m really sorry for the below generator. Basically it`s iterate over tuples inside vault_secrets_raw tuple
-#If tuple is False - it`s mean that secret did`n exist and generator handle that
-vault_secrets = tuple(secret for subtuple in vault_secrets_raw if subtuple is not False for secret in subtuple)
+secret_wildcard_paths = filter(lambda path: path[-1]=='*', secret_paths)
+secret_casual_paths = filter(lambda path: path[-1] != '*', secret_paths)
+vault_secrets_wildcard_raw = map(vault_Secret.pull_secrets, secret_wildcard_paths) #-> generator with generators of vault_secret or bool objects
+vault_secrets_casual_raw = map(vault_Secret.pull_secrets, secret_casual_paths) #-> generator of vault secrets or bool objects
+
+vault_secrets_wildcard = (secret for subgen in vault_secrets_wildcard_raw if subgen is not False for secret in subgen)
+vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False)
+
+#merge wildcard and casual results to one tuple
+vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual)
+
 #filter vault secrets
-valid_vault_secrets = tuple(filter(validate_vault_secret, vault_secrets)) #set invalid flags and invalid reasons
-invalid_vault_secrets = tuple(filter(lambda v_secret: v_secret.invalid is True, vault_secrets))
+valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
+invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
+
+for inv_s in invalid_vault_secrets:
+    logging.warning(f'SYSTEM | {inv_s.kv_full_path} is invalid. Upload aborted')
 
 #creating k8s secrets from vault objects
 list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))

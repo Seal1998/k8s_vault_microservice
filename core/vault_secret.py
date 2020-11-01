@@ -16,10 +16,6 @@ class vault_Secret:
         self.status_code = None
         self.secret_data = self.__get_secret() #getting secret
 
-        # secret marked as invalid if it contains non k8s keys or invalid value type or non dns name
-        self.invalid = False
-        self.invalid_reason = None
-
     def __repr__(self):
         return str({self.secret_name: self.secret_data})
 
@@ -31,11 +27,11 @@ class vault_Secret:
         if secret_response.status_code == 404:
             logging.warning(f'HVAULT | No such secret {self.kv_full_path}. Skipping')
             self.status_code = 404
-            return False
+            return {}
         elif secret_response.status_code == 403:
             logging.error(f'HVAULT | Token has no access to {self.kv_full_path}')
             self.status_code = 403
-            return False
+            return {}
         self.status_code = 200
         response_data = secret_response.json()['data'] if self.kv_mount_version == '1' else secret_response.json()['data']['data']
         return response_data
@@ -53,7 +49,7 @@ class vault_Secret:
             kv_mount_version = cls.mounts_info[f'{kv_mount_path}/']['options']['version']
         except KeyError:
             logging.error(f'HVAULT | No such kv engine - {kv_mount_path}. Skipping...')
-            return []
+            return False
         if secret_name in ('*', '+'):
             #list secrets
             list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
@@ -79,20 +75,18 @@ class vault_Secret:
             listed_secrets_paths = tuple(map(path_from_listed_secret, listed_secrets))
             listed_wildcard_paths = tuple(filter(lambda path: path[-1]=='*', listed_secrets_paths))
             listed_casual_paths = tuple(filter(lambda path: path[-1] != '*', listed_secrets_paths))
-            secrets_obj = tuple(map(vault_Secret.pull_secrets, listed_casual_paths))
-            if secret_name == '*' and listed_wildcard_paths:
-                secrets_wildcard_obj = tuple(map(cls.pull_secrets, listed_wildcard_paths))
-                wildcard_secrets = tuple(i for subtuple in secrets_wildcard_obj for i in subtuple)
+            #query casual (non wildcard secrets)
+            secrets_obj = map(vault_Secret.pull_secrets, listed_casual_paths)
+            if secret_name == '*' and len(listed_wildcard_paths) > 0:
+                secrets_wildcard_obj = map(cls.pull_secrets, listed_wildcard_paths)
+                wildcard_secrets = (i for subgen in secrets_wildcard_obj for i in subgen)
                 secrets_obj = (*secrets_obj, *wildcard_secrets)           
             
             return secrets_obj
         
         else:
             new_secret_object = cls(kv_mount_path, mountless_path)
-            if new_secret_object.status_code == 200:
-                return new_secret_object
-            else:
-                return False
+            return new_secret_object
             
     
     @classmethod
