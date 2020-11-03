@@ -113,16 +113,16 @@ elif paths_source.vault_secret:
         path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
 
-secret_wildcard_paths = filter(lambda path: path[-1]=='*', secret_paths)
-secret_casual_paths = filter(lambda path: path[-1] != '*', secret_paths)
-vault_secrets_wildcard_raw = map(vault_Secret.pull_secrets, secret_wildcard_paths) #-> generator with generators of vault_secret or bool objects
-vault_secrets_casual_raw = map(vault_Secret.pull_secrets, secret_casual_paths) #-> generator of vault secrets or bool objects
+secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_paths)
+secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_paths)
+vault_secrets_wildcard_raw = map(vault_Secret.pull_secrets, secret_wildcard_paths) #-> generator of tuples with secrets
+vault_secrets_casual_raw = map(vault_Secret.pull_secrets, secret_casual_paths) #-> generator of secrets
 
-vault_secrets_wildcard = (secret for subgen in vault_secrets_wildcard_raw if subgen is not False for secret in subgen)
-vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False)
+vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple is not False for secret in subtuple) #generator
+vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False) #generator
 
-#merge wildcard and casual results to one tuple
-vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual)
+#merge wildcard and casual generators to one tuple
+vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
 
 #filter vault secrets
 valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)

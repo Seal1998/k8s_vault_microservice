@@ -66,7 +66,6 @@ class vault_Secret:
                 listed_secrets = listed_secrets_response.json()['data']['keys']
 
             #recurse call to pull_secrets func
-            
             def path_from_listed_secret(listed_secret):
                 secret_postfix = f"{'*' if listed_secret[-1] == '/' else ''}"
                 secret_path = f"{kv_mount_path}/{mountless_path}{'/' if mountless_path != '' else ''}{listed_secret}{secret_postfix}"
@@ -80,9 +79,9 @@ class vault_Secret:
             if secret_name == '*' and len(listed_wildcard_paths) > 0:
                 secrets_wildcard_obj = map(cls.pull_secrets, listed_wildcard_paths)
                 wildcard_secrets = (i for subgen in secrets_wildcard_obj for i in subgen)
-                secrets_obj = (*secrets_obj, *wildcard_secrets)           
-            
-            return secrets_obj
+                secrets_obj = (*secrets_obj, *wildcard_secrets)
+
+            return (*secrets_obj,)
         
         else:
             new_secret_object = cls(kv_mount_path, mountless_path)

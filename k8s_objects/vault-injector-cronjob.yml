@@ -23,7 +23,7 @@ spec:
                 - name: VAULT_ROLE
                   value: "k8s_test"
                 - name: VAULT_PATHS_SECRET
-                  value: "kubernetes/configuration/injector-paths"
+                  value: "injector-demo/configuration/vault-injector-paths"
 #     In order to use config map as paths source, replace VAULT_PATHS_SECRET with:
 #
 #               - name: VAULT_PATHS_FILE
