@@ -3,7 +3,7 @@ import logging
 from collections import namedtuple
 from kubernetes import config, client
 from pathlib import Path
-from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt
+from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt, validate_vault_secret
 from core import vault_Secret
 from core import k8s_Secret
 
@@ -101,11 +101,7 @@ vault_secrets = []
 if paths_source.path_file:
     logging.info('SYSTEM | Loading secrets via file paths source')
     with open(paths_source.path, 'r') as hc_paths:
-        path_lines = hc_paths.readlines()
-        for path in path_lines:
-            path = path.strip()
-            new_secrets = vault_Secret.pull_secrets(path)
-            vault_secrets = [*vault_secrets, *new_secrets]
+        secret_paths = tuple(path.strip() for path in hc_paths.readlines())
 
 elif paths_source.vault_secret:
     logging.info('SYSTEM | Loading secrets via Vault secret paths source')
@@ -114,12 +110,27 @@ elif paths_source.vault_secret:
         logging.error('SYSTEM | Cannot pull paths from Vault')
         exit(1)
     else:
-        path_secret = path_secret[0]
+        path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
-    for path in secret_paths:
-        new_secrets = vault_Secret.pull_secrets(path)
-        vault_secrets = [*vault_secrets, *new_secrets]
+
+secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_paths)
+secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_paths)
+vault_secrets_wildcard_raw = map(vault_Secret.pull_secrets, secret_wildcard_paths) #-> generator of tuples with secrets
+vault_secrets_casual_raw = map(vault_Secret.pull_secrets, secret_casual_paths) #-> generator of secrets
+
+vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple is not False for secret in subtuple) #generator
+vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False) #generator
+
+#merge wildcard and casual generators to one tuple
+vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
+
+#filter vault secrets
+valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
+invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
+
+for inv_s in invalid_vault_secrets:
+    logging.warning(f'SYSTEM | {inv_s.kv_full_path} is invalid. Upload aborted')
 
 #creating k8s secrets from vault objects
-list(map(k8s_Secret.upload_vault_secret, vault_secrets))
+list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))
 k8s_Secret.remove_untrackable_secrets()

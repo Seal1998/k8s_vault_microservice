@@ -72,23 +72,6 @@ class k8s_Secret:
     @classmethod
     def upload_vault_secret(cls, vault_secret):
         logging.info(f'K8S | Uploading {vault_secret.secret_name} ...')
-        #check types
-        str_type_check = all(type(value) is str for value in vault_secret.secret_data.values())
-        if not str_type_check:
-            logging.error(f'K8S | Not all values of [{vault_secret.kv_full_path}] secret has str type. Aborting upload')
-            return False
-
-        #check for dns valid name
-        dns_match = re.fullmatch('([a-zA-Z\d]+[\.-]{0,1})+[a-zA-Z\d]+', vault_secret.secret_name)
-        if dns_match is None:
-            logging.error(f'HVAULT | Secret [{vault_secret.secret_name}] has invalid dns name. Aborting upload')
-            return False
-        
-        #check keys
-        keys_check = all(re.fullmatch('([\w]+[\.-]{0,1})+[\w]+', key) for key in vault_secret.secret_data.keys())
-        if not keys_check:
-            logging.error(f'K8S | Not all keys of [{vault_secret.kv_full_path}] secret are valid. Aborting upload')
-            return False
 
         rendered_vault_secret_data = yaml.safe_load(
             cls.secret_template.render(
@@ -178,7 +161,7 @@ class k8s_Secret:
             else:
                 logging.info(f'K8S | Secret {k8s_secret_name} do not manage by vault-injector. Injector labels will be added')
                 self.__label_secret_with_injector_key(k8s_secret_name)
-                #Save old labels, add vault-injector labels
+                #Save old labels, add add vault-injector labels
     
     def __label_secret_with_injector_key(self, k8s_secret_name):
         logging.info(f'K8S | Labeling secret {k8s_secret_name} with injector values')
