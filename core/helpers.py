@@ -18,7 +18,7 @@ def validate_vault_secret(vault_secret):
     #check keys
     keys_check = all(re.fullmatch('([\w]+[\.-]{0,1})+[\w]+', key) for key in vault_secret.secret_data.keys())
     #status_code check
-    status_code_check = vault_secret.status_code is 200
+    status_code_check = vault_secret.status_code == 200
     return all([str_type_check, dns_match, keys_check, status_code_check])
 
 def get_pod_namespace():
