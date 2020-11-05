@@ -4,8 +4,7 @@ from collections import namedtuple
 from kubernetes import config, client
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt, validate_vault_secret
-from core import vault_Secret
-from core import k8s_Secret
+from core import k8s_Secret, Vault
 
 def load_environment():
     env = os.environ
@@ -76,27 +75,30 @@ logging.basicConfig(format=formatter_string, level=logging.INFO)
     vault_k8s_auth_mount,
     paths_source        ] = load_environment()
 
+vault = Vault(address=vault_address, verify_ssl=False)
+
 #k8s vault globals
 if dev_mode:
     config.load_kube_config()
     vault_token = dev_vault_token
     k8s_namespace = dev_k8s_namespace
-    vault_Secret.prepare_connection(vault_address, vault_token=dev_vault_token)
+#    vault_Secret.prepare_connection(vault_address, vault_token=dev_vault_token)
+    vault.prepare_connection(vault_token=dev_vault_token)
 else:
     config.load_incluster_config()
     k8s_namespace = get_pod_namespace()
     k8s_jwt_token = get_pod_jwt()
     #vault
-    vault_Secret.prepare_connection(
-        vault_addres=vault_address,
-        vault_k8s_role=vault_role,
-        k8s_jwt_token=k8s_jwt_token,
-        auth_path=vault_k8s_auth_mount
-        )
+    vault.prepare_connection(vault_k8s_role=vault_role, k8s_jwt_token=k8s_jwt_token,
+                            vault_k8s_auth_mount=vault_k8s_auth_mount)
+    # vault_Secret.prepare_connection(
+    #     vault_addres=vault_address,
+    #     vault_k8s_role=vault_role,
+    #     k8s_jwt_token=k8s_jwt_token,
+    #     auth_path=vault_k8s_auth_mount
+    #     )
 
 k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
-
-vault_secrets = []
 
 if paths_source.path_file:
     logging.info('SYSTEM | Loading secrets via file paths source')
@@ -105,7 +107,7 @@ if paths_source.path_file:
 
 elif paths_source.vault_secret:
     logging.info('SYSTEM | Loading secrets via Vault secret paths source')
-    path_secret = vault_Secret.pull_secrets(paths_source.path)
+    path_secret = vault.get_secrets_by_path(paths_source.path)
     if not path_secret:
         logging.error('SYSTEM | Cannot pull paths from Vault')
         exit(1)
@@ -115,8 +117,8 @@ elif paths_source.vault_secret:
 
 secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_paths)
 secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_paths)
-vault_secrets_wildcard_raw = map(vault_Secret.pull_secrets, secret_wildcard_paths) #-> generator of tuples with secrets
-vault_secrets_casual_raw = map(vault_Secret.pull_secrets, secret_casual_paths) #-> generator of secrets
+vault_secrets_wildcard_raw = map(vault.get_secrets_by_path, secret_wildcard_paths) #-> generator of tuples with secrets
+vault_secrets_casual_raw = map(vault.get_secrets_by_path, secret_casual_paths) #-> generator of secrets
 
 vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple is not False for secret in subtuple) #generator
 vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False) #generator
@@ -129,7 +131,7 @@ valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), v
 invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
 
 for inv_s in invalid_vault_secrets:
-    logging.warning(f'SYSTEM | {inv_s.kv_full_path} is invalid. Upload aborted')
+    logging.warning(f'SYSTEM | {inv_s.full_path} is invalid. Upload aborted')
 
 #creating k8s secrets from vault objects
 list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))
