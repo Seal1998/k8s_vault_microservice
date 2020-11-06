@@ -23,7 +23,7 @@ class k8s_Secret:
         self.secret_yml_data = secret_yml_data
         self.secret_yml_data['data'] = sort_dict_alphabetical_keys(self.secret_yml_data['data'])
         self.secret_name = self.secret_yml_data['metadata']['name']
-
+        
         #action flags
         self.secret_to_update = False
         self.secret_to_replace = False
@@ -129,7 +129,7 @@ class k8s_Secret:
             try:
                 self.k8s_CoreV1_client.patch_namespaced_secret(namespace=self.namespace, body={'data': self.secret_yml_data['data']}, name=self.secret_name)
                 logging.info('K8S | %s | Secret successfully updated with new values. Keys - %s', 
-                                                    self.secret_name, ", ".join([key for key in self.secret_yml_data['data'].keys()]))
+                                                    self.secret_name, ", ".join([str(key) for key in self.secret_yml_data['data'].keys()]))
             except client.exceptions.ApiException as err:
                 print(err)    
         elif self.secret_to_create:

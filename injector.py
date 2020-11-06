@@ -82,7 +82,6 @@ if dev_mode:
     config.load_kube_config()
     vault_token = dev_vault_token
     k8s_namespace = dev_k8s_namespace
-#    vault_Secret.prepare_connection(vault_address, vault_token=dev_vault_token)
     vault.prepare_connection(vault_token=dev_vault_token)
 else:
     config.load_incluster_config()
@@ -91,12 +90,6 @@ else:
     #vault
     vault.prepare_connection(vault_k8s_role=vault_role, k8s_jwt_token=k8s_jwt_token,
                             vault_k8s_auth_mount=vault_k8s_auth_mount)
-    # vault_Secret.prepare_connection(
-    #     vault_addres=vault_address,
-    #     vault_k8s_role=vault_role,
-    #     k8s_jwt_token=k8s_jwt_token,
-    #     auth_path=vault_k8s_auth_mount
-    #     )
 
 k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
 
@@ -115,16 +108,25 @@ elif paths_source.vault_secret:
         path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
 
-secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_paths)
-secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_paths)
-vault_secrets_wildcard_raw = map(vault.get_secrets_by_path, secret_wildcard_paths) #-> generator of tuples with secrets
+#exclude and not exclude paths
+secret_exclude_paths_raw = filter(lambda path: path[0]=='!', secret_paths)
+secret_non_exclude_paths = filter(lambda path: path[0]!='!', secret_paths)
+secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
+list(map(vault.exclude_secret, secret_exclude_paths))
+
+#filter and proceed wildcard and casual paths
+secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_non_exclude_paths)
+secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_non_exclude_paths)
+vault_secrets_wildcard_raw = tuple(map(vault.get_secrets_by_path, secret_wildcard_paths)) #-> generator of tuples with secrets
 vault_secrets_casual_raw = map(vault.get_secrets_by_path, secret_casual_paths) #-> generator of secrets
 
-vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple is not False for secret in subtuple) #generator
-vault_secrets_casual = (secret for secret in vault_secrets_casual_raw if secret is not False) #generator
-
+vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
+vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
 #merge wildcard and casual generators to one tuple
 vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
+
+#remove False requests
+vault_secrets = tuple(filter(lambda secret: secret,vault_secrets))
 
 #filter vault secrets
 valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
