@@ -1,5 +1,5 @@
 import os
-import logging
+from core.logging import system_logger
 from collections import namedtuple
 from kubernetes import config, client
 from pathlib import Path
@@ -27,10 +27,10 @@ def load_environment():
     #required vars
     variables = []
     if all(env_var in env.keys() for env_var in required_vars):
-        logging.info('SYSTEM | BASE ENV - OK')
+        system_logger.info('SYSTEM | BASE ENV - OK')
         variables = [*variables, *[env[var] for var in required_vars]]
     else:
-        logging.error(f'SYSTEM | Not all required env vars defined {required_vars}')
+        system_logger.error(f'Not all required env vars defined {required_vars}')
         exit(1)
 
     for optional_var in optional_vars:
@@ -40,17 +40,17 @@ def load_environment():
             variables.append(env[optional_var])
 
     if all(env_var in env.keys() for env_var in path_source_vars):
-        logging.error('SYSTEM | Can`t use several path sources. Specify VAULT_PATHS_FILE or VAULT_PATHS_SECRET')
+        system_logger.error('Can`t use several path sources. Specify VAULT_PATHS_FILE or VAULT_PATHS_SECRET')
         exit(1)
     elif 'VAULT_PATHS_FILE' not in env.keys() and \
         'VAULT_PATHS_SECRET' not in env.keys():
-        logging.error('SYSTEM | Paths sources not specified. Specify VAULT_PATHS_FILE or VAULT_PATHS_SECRET')
+        system_logger.error('Paths sources not specified. Specify VAULT_PATHS_FILE or VAULT_PATHS_SECRET')
         exit(1)
     elif 'VAULT_PATHS_FILE' in env.keys():
-        logging.info('SYSTEM | Using path file as Vault paths source')
+        system_logger.info('Using path file as Vault paths source')
         variables.append(Source(path_file=True, path=env['VAULT_PATHS_FILE']))
     elif 'VAULT_PATHS_SECRET' in env.keys():
-        logging.info('SYSTEM | Using Vault secret as Vault paths source')
+        system_logger.info('Using Vault secret as Vault paths source')
         variables.append(Source(vault_secret=True, path=env['VAULT_PATHS_SECRET']))
 
     return variables
@@ -62,11 +62,6 @@ try:
     dev_mode = True
 except:
     dev_mode = False
-
-#logs options
-formatter_string = '%(asctime)s - %(levelname)s - %(message)s'
-formatter = logging.Formatter(formatter_string)
-logging.basicConfig(format=formatter_string, level=logging.INFO)
 
 [
     vault_address,
@@ -91,18 +86,21 @@ else:
     vault.prepare_connection(vault_k8s_role=vault_role, k8s_jwt_token=k8s_jwt_token,
                             vault_k8s_auth_mount=vault_k8s_auth_mount)
 
+if not vault_injector_id:
+    system_logger.info(f'Injector id not defined. ID will be set to namespace name')
+    vault_injector_id = k8s_namespace
 k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
 
 if paths_source.path_file:
-    logging.info('SYSTEM | Loading secrets via file paths source')
+    system_logger.info('Loading secrets via file paths source')
     with open(paths_source.path, 'r') as hc_paths:
         secret_paths = tuple(path.strip() for path in hc_paths.readlines())
 
 elif paths_source.vault_secret:
-    logging.info('SYSTEM | Loading secrets via Vault secret paths source')
+    system_logger.info('Loading secrets via Vault secret paths source')
     path_secret = vault.get_secrets_by_path(paths_source.path)
     if not path_secret:
-        logging.error('SYSTEM | Cannot pull paths from Vault')
+        system_logger.info('Cannot pull paths from Vault')
         exit(1)
     else:
         path_secret = path_secret
@@ -110,7 +108,7 @@ elif paths_source.vault_secret:
 
 #exclude and not exclude paths
 secret_exclude_paths_raw = filter(lambda path: path[0]=='!', secret_paths)
-secret_non_exclude_paths = filter(lambda path: path[0]!='!', secret_paths)
+secret_non_exclude_paths = tuple(filter(lambda path: path[0]!='!', secret_paths))
 secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
 list(map(vault.exclude_secret, secret_exclude_paths))
 
@@ -133,7 +131,7 @@ valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), v
 invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
 
 for inv_s in invalid_vault_secrets:
-    logging.warning(f'SYSTEM | {inv_s.full_path} is invalid. Upload aborted')
+    system_logger.warning(f'SYSTEM | {inv_s.full_path} is invalid. Upload aborted')
 
 #creating k8s secrets from vault objects
 list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))

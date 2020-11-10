@@ -1,0 +1,1 @@
+from core.decorators.logs import vault_log

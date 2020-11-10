@@ -11,6 +11,13 @@ def sort_dict_alphabetical_keys(dictionary):
         new_dict[sorted_key] = dictionary[sorted_key]
     return new_dict
 
+def unwrap_response(response):
+    status_code = response.status_code
+    request_type = response.request.method
+    request_url = response.request.url
+    response_text = response.text
+    return status_code, request_type, request_url, response_text
+
 def validate_vault_secret(vault_secret):
     str_type_check = all(type(value) is str for value in vault_secret.secret_data.values())
     #check for dns valid name
@@ -18,8 +25,7 @@ def validate_vault_secret(vault_secret):
     #check keys
     keys_check = all(re.fullmatch('([\w]+[\.-]{0,1})+[\w]+', key) for key in vault_secret.secret_data.keys())
     #status_code check
-    status_code_check = vault_secret.status_code == 200
-    return all([str_type_check, dns_match, keys_check, status_code_check])
+    return all([str_type_check, dns_match, keys_check])
 
 def get_pod_namespace():
     with open('/var/run/secrets/kubernetes.io/serviceaccount/namespace', 'r') as ns_file:
