@@ -3,3 +3,4 @@ env/
 secrets/
 *.log
 hc_path
+tests/*

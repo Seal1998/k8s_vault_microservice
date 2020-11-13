@@ -11,8 +11,8 @@ class ApiException(Exception):
     def __str__(self):
         return self.log_str()
 
-    def log_str(self, no_text=False):
-        if no_text:
+    def log_str(self, no_error_text=False):
+        if no_error_text:
             text = False
         else:
             text = f'\n\n{self.response_text}' if self.response_text else False

@@ -3,10 +3,6 @@ import jinja2
 import re
 from core import k8s_logger
 from core.helpers import base64_encode_string, sort_dict_alphabetical_keys
-from kubernetes import client
-
-templates_path = './core/templates'
-
 
 class k8s_Secret:
     namespace = None

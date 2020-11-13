@@ -5,7 +5,7 @@ from core.helpers import unwrap_response
 from core.decorators import vault_log
 from core.exceptions import VaultException
 
-class Vault:
+class VaultOperator:
 
     def __init__(self, address, verify_ssl):
         self.address = address
@@ -16,7 +16,7 @@ class Vault:
         self.exclude_list = [] #list of secret paths for exclude
         self.logger = logging.getLogger('__vault__')
 
-    @vault_log(msg='Login via kubernetes method...', on_success='Success', fatal=True)
+    @vault_log(msg='Login via kubernetes method with [[k8s_role]] role', on_success='Success', fatal=True, template_kvargs=True)
     def login_kubernetes(self, k8s_role, jwt_token, auth_mount):
         auth_url = f'{self.address}/v1/auth/{auth_mount}/login'
         token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token}, verify=self.verify_ssl)
@@ -35,29 +35,30 @@ class Vault:
         else:
             return mounts_info_response.json()
 
-    @vault_log(msg='Checking HC Vault connection...', on_success='OK', fatal=True)
-    def check_vault_connection(self, timeout=10):
+    @vault_log(msg='Checking HC Vault connection to [[address]]...', on_success='OK', fatal=True, 
+                                                            print_exception=True, template_kvargs=True)
+    def check_vault_connection(self, timeout=10, address=None):
         check_response = requests.get(f'{self.address}/v1/sys/health', verify=self.verify_ssl, timeout=timeout)
         if check_response.status_code != 200:
             raise VaultException(*unwrap_response(check_response))
 
-    @vault_log(msg='Checking HC Vault token policies...', print_return=True, no_text=True)
+    @vault_log(msg='Checking HC Vault token policies...', print_return=True, no_error_text=True)
     def check_vault_token_policies(self):
         token_info = requests.post(f'{self.address}/v1/auth/token/lookup', data={"token": self.token}, 
                                     headers={'X-Vault-Token': self.token}, verify=self.verify_ssl)
         if token_info.status_code != 200:
             raise VaultException(*unwrap_response(token_info))
         else:
-            return str(token_info.json()['data']['policies'])
+            return f"Token policies - {str(token_info.json()['data']['policies'])}"
 
-    @vault_log(on_error='No such KV engine. Skipped')
+    @vault_log(on_error='No such KV engine [[kv_mount]]. Skipped', template_kvargs=True)
     def get_kv_mount_version(self, kv_mount):
         kv_mount_version = self.mounts_info[f'{kv_mount}/']['options']['version']
         return kv_mount_version
 
     @vault_log(msg='Preparing HC Vault connection')
     def prepare_connection(self, vault_k8s_role=None, k8s_jwt_token=None, vault_k8s_auth_mount=None, vault_token=None):
-        self.check_vault_connection()
+        self.check_vault_connection(address=self.address)
         if not vault_k8s_auth_mount:
             #use default mount path
             vault_k8s_auth_mount = 'kubernetes'
@@ -68,7 +69,7 @@ class Vault:
         self.check_vault_token_policies()
         self.mounts_info = self.get_mounts_info()
 
-    @vault_log(print_return=True, warning=True)
+    @vault_log(msg='Excluding [[path]]', print_return=True, warning=True, template_kvargs=True)
     def exclude_secret(self, path):
         [kv_mount_path, kv_mountless_path,
         secret_name] = self.__split_path_by_parts(path)
@@ -105,9 +106,8 @@ class Vault:
 
         return (*wildcard_secrets,)
 
-    @vault_log(on_error='Can`t retrieve secret. Skipped', no_text=True)
+    @vault_log(msg='Processing [[path]] secret', on_error='Can`t retrieve secret. Skipped', no_error_text=True, template_kvargs=True)
     def get_single_secret(self, path):
-        self.logger.info(f'Processing [{path}] secret...')
         if path in self.exclude_list:
             self.logger.warning(f'Secret [{path}] excluded')
             return False
@@ -131,10 +131,9 @@ class Vault:
         secret = VaultSecret(f'{kv_mount}/{kv_mountless}', secret_name, response_data)
         return secret
 
-    @vault_log
+    @vault_log(msg='Listing [[path]]...', no_error_text=True, template_kvargs=True)
     def list_secrets_by_path(self, path, full_path=True):
         kv_mount, kv_mountless, _ = self.__split_path_by_parts(path)
-        self.logger.info(f'Listing [{kv_mount}/{kv_mountless}]')
         kv_mount_version = self.get_kv_mount_version(kv_mount)
         if not kv_mount_version:
             return False
@@ -150,6 +149,7 @@ class Vault:
                 listed_secrets = (self.__build_path_from_secret_attrs(secret, kv_mount, kv_mountless) for secret in listed_secrets)
             return (*listed_secrets,)
 
+    @vault_log(msg='Listing [[path]] recursively...', template_kvargs=True)
     def list_secrets_by_path_recurse(self, path, full_path=True):
         listed_secrets = self.list_secrets_by_path(path, full_path) #CAN RETURN FALSE!!!
         if not listed_secrets:
