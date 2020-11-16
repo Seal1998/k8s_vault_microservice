@@ -1,22 +1,6 @@
 import re
 from base64 import b64encode
 
-def template_log_record(template_string, values_dict): #proccessing [[secret_name]] secret
-    capture_keys_regexp = r'(?<=\[\[)[\w]+(?=\]\])'
-    capture_template_pattern_regexp = r'\[\[[\w]+\]\]'
-
-    string_els = {index: word for index,word in enumerate(template_string.split(' '))}
-    keys_els = {index: re.search(capture_keys_regexp, word) for index,word in string_els.items() 
-                                                            if re.search(capture_keys_regexp, word)}
-
-    list(map(string_els.pop, keys_els.keys()))
-    
-    template_keys_templated = {index: re.sub(capture_template_pattern_regexp, values_dict[template_key.group()], template_key.string) 
-                                                    for index,template_key in keys_els.items()}
-    
-    templated_string_els = {index: value for index,value in sorted({**string_els, **template_keys_templated}.items())}
-    return ' '.join(templated_string_els.values())
-
 def base64_encode_string(string):
     string = b64encode(str(string).encode('ascii'))
     return string.decode()

@@ -1,9 +1,18 @@
-from kubernetes import config
-from core import KubeInjector
-from core.helpers import template_log_record
+#from kubernetes import config
+#from core import KubeInjector
+import logging
+from core.decorators import Log
+from core.exceptions import VaultException
 
-config.load_kube_config()
+def ex_handler(ex):
+    print(ex)
 
-a = template_log_record('Secret [[[secret_name]]] proccessed. [[result]]', {'secret_name':'secret1', 'result': 'OK'})
-print(a)
-#KubeInjector('default', 'test')
+a = Log.create_vault_logger()
+
+@a.info(msg='test [[a]]', template_kvargs=True, on_success='OK', print_return=True, on_error='Bad luck...')
+def print_a(a):
+    if a == 1:
+        raise VaultException(401, 'GET', 'https://google.com', 'Get lost')
+    return a
+
+print_a(a=1)

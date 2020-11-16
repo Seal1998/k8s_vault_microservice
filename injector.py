@@ -4,7 +4,7 @@ from collections import namedtuple
 from kubernetes import config, client
 from pathlib import Path
 from core.helpers import base64_encode_string, get_pod_namespace, get_pod_jwt, validate_vault_secret
-from core import VaultOperator
+from core import VaultOperator, KubeInjector
 
 def load_environment():
     env = os.environ
@@ -88,53 +88,54 @@ else:
 
 
 
-# if not vault_injector_id:
-#     system_logger.info(f'Injector id not defined. ID will be set to namespace name')
-#     vault_injector_id = k8s_namespace
-# k8s_Secret.prepare_connection(k8s_namespace, vault_injector_id)
+if not vault_injector_id:
+    system_logger.info(f'Injector id not defined. ID will be set to namespace name')
+    vault_injector_id = k8s_namespace
+    
+k8s_injector = KubeInjector(k8s_namespace, vault_injector_id)
 
-# if paths_source.path_file:
-#     system_logger.info('Loading secrets via file paths source')
-#     with open(paths_source.path, 'r') as hc_paths:
-#         secret_paths = tuple(path.strip() for path in hc_paths.readlines())
+if paths_source.path_file:
+    system_logger.info('Loading secrets via file paths source')
+    with open(paths_source.path, 'r') as hc_paths:
+        secret_paths = tuple(path.strip() for path in hc_paths.readlines())
 
-# elif paths_source.vault_secret:
-#     system_logger.info('Loading secrets via Vault secret paths source')
-#     path_secret = vault.get_secrets_by_path(paths_source.path)
-#     if not path_secret:
-#         system_logger.info('Cannot pull paths from Vault')
-#         exit(1)
-#     else:
-#         path_secret = path_secret
-#     secret_paths = path_secret.secret_data['vault-injector-paths']
+elif paths_source.vault_secret:
+    system_logger.info('Loading secrets via Vault secret paths source')
+    path_secret = vault.get_secrets_by_path(path=paths_source.path)
+    if not path_secret:
+        system_logger.info('Cannot pull paths from Vault')
+        exit(1)
+    else:
+        path_secret = path_secret
+    secret_paths = path_secret.secret_data['vault-injector-paths']
 
-# #exclude and not exclude paths
-# secret_exclude_paths_raw = filter(lambda path: path[0]=='!', secret_paths)
-# secret_non_exclude_paths = tuple(filter(lambda path: path[0]!='!', secret_paths))
-# secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
-# list(map(vault.exclude_secret, secret_exclude_paths))
+#exclude and not exclude paths
+secret_exclude_paths_raw = filter(lambda path: path[0]=='!', secret_paths)
+secret_non_exclude_paths = tuple(filter(lambda path: path[0]!='!', secret_paths))
+secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
+list(map(vault.exclude_secret, secret_exclude_paths))
 
-# #filter and proceed wildcard and casual paths
-# secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_non_exclude_paths)
-# secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_non_exclude_paths)
-# vault_secrets_wildcard_raw = tuple(map(vault.get_secrets_by_path, secret_wildcard_paths)) #-> generator of tuples with secrets
-# vault_secrets_casual_raw = map(vault.get_secrets_by_path, secret_casual_paths) #-> generator of secrets
+#filter and proceed wildcard and casual paths
+secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_non_exclude_paths)
+secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_non_exclude_paths)
+vault_secrets_wildcard_raw = tuple(map(lambda path: vault.get_secrets_by_path(path=path), secret_wildcard_paths)) #-> generator of tuples with secrets
+vault_secrets_casual_raw = map(vault.get_secrets_by_path, secret_casual_paths) #-> generator of secrets
 
-# vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
-# vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
-# #merge wildcard and casual generators to one tuple
-# vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
+vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
+vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
+#merge wildcard and casual generators to one tuple
+vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
 
-# #remove False requests
-# vault_secrets = tuple(filter(lambda secret: secret,vault_secrets))
+#remove False requests
+vault_secrets = tuple(filter(lambda secret: secret,vault_secrets))
 
-# #filter vault secrets
-# valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
-# invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
+#filter vault secrets
+valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
+invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
 
-# for inv_s in invalid_vault_secrets:
-#     system_logger.warning(f'{inv_s.full_path} is invalid. Upload aborted')
+for inv_s in invalid_vault_secrets:
+    system_logger.warning(f'{inv_s.full_path} is invalid. Upload aborted')
 
-# #creating k8s secrets from vault objects
+#creating k8s secrets from vault objects
 # list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))
 # k8s_Secret.remove_untrackable_secrets()

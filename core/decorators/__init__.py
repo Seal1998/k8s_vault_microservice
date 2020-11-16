@@ -1,1 +1,1 @@
-from core.decorators.logs import vault_log
+from core.decorators.logs import Log

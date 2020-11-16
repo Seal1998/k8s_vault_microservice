@@ -1,4 +1,7 @@
 from core.k8s_secret_operator import KubeSecretOperator
+from core.decorators import Log
+
+k8s_log = Log.create_k8s_logger()
 
 class KubeInjector:
 
