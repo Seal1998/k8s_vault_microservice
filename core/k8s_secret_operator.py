@@ -9,11 +9,10 @@ k8s_log = Log.create_k8s_logger()
 
 class KubeSecretOperator:
 
-    def __init__(self, namespace, labels_dict):
+    def __init__(self, namespace):
         self.API_CoreV1 = client.CoreV1Api()
 
         self.namespace = namespace
-        self.labels_dict = labels_dict
 
         self.tpl_env = self.__get_template_env()
 
@@ -22,7 +21,7 @@ class KubeSecretOperator:
     @k8s_log.info(msg='Checking K8S permissions...', on_success='Permissions - OK', fatal=True)
     def check_permissions(self):
         listed_secrets = self.list_secrets()
-        first_secret_name = listed_secrets.items[0].metadata.name
+        first_secret_name = listed_secrets[0].metadata.name
 
         self.get_secret(secret_name=first_secret_name)
         
@@ -34,19 +33,25 @@ class KubeSecretOperator:
         self.delete_secret(secret_name=test_secret_name)
 
     @k8s_log.info(msg='Listing namespace secrets')
-    def list_secrets(self):
-        listed_secrets = self.API_CoreV1.list_namespaced_secret(self.namespace)
-        return listed_secrets
+    def list_secrets(self, label_dict=None, label_key=None):
+        call_kvargs = {'namespace': self.namespace}
+        if label_dict:
+            call_kvargs['label_selector'] = [f'{key}={item}' for key,item in label_dict.items()][0]
+        elif label_key:
+            call_kvargs['label_selector'] = f'{label_key}'
+        listed_secrets = self.API_CoreV1.list_namespaced_secret(**call_kvargs)
+        return listed_secrets.items
 
     @k8s_log.info(msg='Getting [[secret_name]] secret', template_kvargs=True)
     def get_secret(self, secret_name):
-        self.API_CoreV1.read_namespaced_secret(namespace=self.namespace, name=secret_name)
+        secret = self.API_CoreV1.read_namespaced_secret(namespace=self.namespace, name=secret_name)
+        return secret
 
-    @k8s_log.info(msg='Creating [[secret_name]] secret', template_kvargs=True)
-    def create_secret(self, secret_name, data_dict):
+    @k8s_log.info(msg='Creating new [[secret_name]] secret', template_kvargs=True)
+    def create_secret(self, secret_name, data_dict, label_dict={}):
         data_dict = self.__encode_data(data_dict)
         loaded_yml = self.__render_secret_template(secret_name=secret_name, 
-                                data_dict=data_dict, return_loaded_yml=True)
+                                data_dict=data_dict, labels_dict=label_dict,return_loaded_yml=True)
         created_secret = self.API_CoreV1.create_namespaced_secret(self.namespace, loaded_yml)
         return created_secret
 
@@ -55,9 +60,9 @@ class KubeSecretOperator:
         self.API_CoreV1.delete_namespaced_secret(secret_name, self.namespace)
 
     @k8s_log.info(msg='Replacing [[secret_name]] secret', template_kvargs=True)
-    def replace_secret(self, secret_name, data_dict):
+    def replace_secret(self, secret_name, data_dict, label_dict={}):
         secret_to_replace = self.__render_secret_template(secret_name=secret_name, 
-                                     data_dict=data_dict, return_loaded_yml=True)
+                                     data_dict=data_dict, labels_dict=label_dict, return_loaded_yml=True)
         replaced_secret = self.API_CoreV1.replace_namespaced_secret(secret_name, self.namespace, secret_to_replace)
         return replaced_secret
 
@@ -66,10 +71,10 @@ class KubeSecretOperator:
 
     @k8s_log.info(msg='Rendering secret with name [[secret_name]]', template_kvargs=True)
     def __render_secret_template(self, *, secret_name=None, data_dict=None, return_loaded_yml=False,
-                                    secret_tpl_name='Secret.j2'):
+                                secret_tpl_name='Secret.j2', labels_dict=None):
 
         secret_template = self.tpl_env.get_template(secret_tpl_name)
-        yml_raw_string = secret_template.render(secret_name=secret_name, data_dict=data_dict, label_dict=self.labels_dict)
+        yml_raw_string = secret_template.render(secret_name=secret_name, data_dict=data_dict, labels_dict=labels_dict)
 
         if not return_loaded_yml:
             return yml_raw_string

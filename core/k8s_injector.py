@@ -1,14 +1,51 @@
 from core.k8s_secret_operator import KubeSecretOperator
 from core.decorators import Log
+from core.helpers import sort_dict_alphabetical_keys
 
 k8s_log = Log.create_k8s_logger()
 
 class KubeInjector:
+    label_key = 'vault-injector'
 
     def __init__(self, namespace, injector_id):
         self.injector_id = injector_id
-        self.secret_op = KubeSecretOperator(namespace, labels_dict={'vault-injector': self.injector_id})
-        self.all_secrets, self.managed_secrets = self.__get_all_and_managed_secrets()
+        self.injector_label_dict = {self.label_key:self.injector_id}
+        self.secret_op = KubeSecretOperator(namespace)
 
+        [   self.all_secrets, 
+            self.injector_managed_secrets,
+            self.any_injector_managed_secrets   ] = self.__get_all_and_managed_secrets()
+
+    @k8s_log.info(msg='Getting all and managed secrets')
     def __get_all_and_managed_secrets(self):
-        return None, None
+        injector_managed_secrets = self.secret_op.list_secrets(label_dict=self.injector_label_dict)
+        any_injector_managed_secrets = self.secret_op.list_secrets(label_key=self.label_key)
+        all_secrets = self.secret_op.list_secrets()
+        return tuple(secret.metadata.name for secret in all_secrets), \
+                tuple(secret.metadata.name for secret in injector_managed_secrets), \
+                tuple(secret.metadata.name for secret in any_injector_managed_secrets)
+    
+    def __secrets_equivalence(self, first_secret_data, second_secret_data):
+        first_secret_data = sort_dict_alphabetical_keys(first_secret_data)
+        second_secret_data = sort_dict_alphabetical_keys(second_secret_data)
+
+        return first_secret_data == second_secret_data
+
+    @k8s_log.info(msg='Processing [[secret_name]] secret', template_kvargs=True, print_return=True)
+    def upload_secret(self, secret_name, secret_data):
+        if secret_name not in self.all_secrets:
+            self.secret_op.create_secret(secret_name=secret_name, data_dict=secret_data, label_dict=self.injector_label_dict)
+
+        elif secret_name in self.any_injector_managed_secrets:
+            existing_secret = self.secret_op.get_secret(secret_name=secret_name)
+            if secret_name not in self.injector_managed_secrets:
+                replaced_labels_dict = existing_secret.metadata.labels
+            else:
+                replaced_labels_dict = self.injector_label_dict
+            if self.__secrets_equivalence(existing_secret.data, secret_data):
+                return 'The secret already exists and has not changed'
+            else:
+                self.secret_op.replace_secret(secret_name=secret_name, data_dict=secret_data, 
+                                                label_dict=replaced_labels_dict)
+                return f'Secret exists and replaced with new version. \
+                                        Keys - {str([key for key in secret_data.keys()])}'
