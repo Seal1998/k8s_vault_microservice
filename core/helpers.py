@@ -1,8 +1,12 @@
 import re
-from base64 import b64encode
+from base64 import b64encode, b64decode
 
 def base64_encode_string(string):
     string = b64encode(str(string).encode('ascii'))
+    return string.decode()
+
+def base64_decode_string(string):
+    string = b64decode(str(string).encode('ascii'))
     return string.decode()
 
 def sort_dict_alphabetical_keys(dictionary):

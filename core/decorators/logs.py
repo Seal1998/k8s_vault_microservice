@@ -26,7 +26,7 @@ class Log:
         print(type(exception), traceback.format_exc())
 
     def __vault_exception_handler(self, exception):
-        if exception is VaultException:
+        if type(exception) is VaultException:
             self.log_msg(logging.ERROR, exception.log_str())
         else:
             print(type(exception), traceback.format_exc())

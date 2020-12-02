@@ -2,7 +2,7 @@ import yaml
 import jinja2
 import random
 from core.decorators import Log
-from core.helpers import base64_encode_string, sort_dict_alphabetical_keys
+from core.helpers import base64_encode_string, base64_decode_string, sort_dict_alphabetical_keys
 from kubernetes import client
 
 k8s_log = Log.create_k8s_logger()
@@ -20,6 +20,7 @@ class KubeSecretOperator:
 
     @k8s_log.info(msg='Checking K8S permissions...', on_success='Permissions - OK', fatal=True)
     def check_permissions(self):
+        self.check_namespase()
         listed_secrets = self.list_secrets()
         first_secret_name = listed_secrets[0].metadata.name
 
@@ -31,6 +32,10 @@ class KubeSecretOperator:
         test_secret_replace_dict = {'replace': 'test'}
         self.replace_secret(secret_name=test_secret_name, data_dict=test_secret_replace_dict)
         self.delete_secret(secret_name=test_secret_name)
+    
+    @k8s_log.info(msg='Checking K8S namespace...', on_success='Namespace - OK', fatal=True)
+    def check_namespase(self):
+        namespace = self.API_CoreV1.read_namespace(self.namespace)
 
     @k8s_log.info(msg='Listing namespace secrets')
     def list_secrets(self, label_dict=None, label_key=None):
@@ -42,12 +47,13 @@ class KubeSecretOperator:
         listed_secrets = self.API_CoreV1.list_namespaced_secret(**call_kvargs)
         return listed_secrets.items
 
-    @k8s_log.info(msg='Getting [[secret_name]] secret', template_kvargs=True)
+    @k8s_log.info(msg='Getting [[[secret_name]]] secret', template_kvargs=True)
     def get_secret(self, secret_name):
         secret = self.API_CoreV1.read_namespaced_secret(namespace=self.namespace, name=secret_name)
+        secret.data = {key: base64_decode_string(value) for key, value in secret.data.items()} #decoding secret data dict
         return secret
 
-    @k8s_log.info(msg='Creating new [[secret_name]] secret', template_kvargs=True)
+    @k8s_log.info(msg='Creating new [[[secret_name]]] secret', template_kvargs=True)
     def create_secret(self, secret_name, data_dict, label_dict={}):
         data_dict = self.__encode_data(data_dict)
         loaded_yml = self.__render_secret_template(secret_name=secret_name, 
@@ -55,12 +61,14 @@ class KubeSecretOperator:
         created_secret = self.API_CoreV1.create_namespaced_secret(self.namespace, loaded_yml)
         return created_secret
 
-    @k8s_log.info(msg='Deleting [[secret_name]] secret', template_kvargs=True)
+    @k8s_log.info(msg='Deleting [[[secret_name]]] secret', template_kvargs=True)
     def delete_secret(self, secret_name):
         self.API_CoreV1.delete_namespaced_secret(secret_name, self.namespace)
+        #true, false
 
-    @k8s_log.info(msg='Replacing [[secret_name]] secret', template_kvargs=True)
+    @k8s_log.info(msg='Replacing [[[secret_name]]] secret', template_kvargs=True)
     def replace_secret(self, secret_name, data_dict, label_dict={}):
+        data_dict = self.__encode_data(data_dict)
         secret_to_replace = self.__render_secret_template(secret_name=secret_name, 
                                      data_dict=data_dict, labels_dict=label_dict, return_loaded_yml=True)
         replaced_secret = self.API_CoreV1.replace_namespaced_secret(secret_name, self.namespace, secret_to_replace)
@@ -69,7 +77,7 @@ class KubeSecretOperator:
     def patch_secret(self, secret_name):
         pass
 
-    @k8s_log.info(msg='Rendering secret with name [[secret_name]]', template_kvargs=True)
+    @k8s_log.info(msg='Rendering secret with name [[[secret_name]]]', template_kvargs=True)
     def __render_secret_template(self, *, secret_name=None, data_dict=None, return_loaded_yml=False,
                                 secret_tpl_name='Secret.j2', labels_dict=None):
 

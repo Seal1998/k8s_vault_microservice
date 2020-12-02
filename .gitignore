@@ -4,3 +4,4 @@ secrets/
 *.log
 hc_path
 tests/*
+export_globals.sh

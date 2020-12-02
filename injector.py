@@ -105,6 +105,9 @@ elif paths_source.vault_secret:
     if not path_secret:
         system_logger.info('Cannot pull paths from Vault')
         exit(1)
+    elif 'vault-injector-paths' not in path_secret.secret_data.keys():
+        system_logger.info('Paths secret does not contain [vault-injector-paths] field')
+        exit(1)
     else:
         path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
@@ -118,16 +121,17 @@ list(map(vault.exclude_secret, secret_exclude_paths))
 #filter and proceed wildcard and casual paths
 secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_non_exclude_paths)
 secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_non_exclude_paths)
-vault_secrets_wildcard_raw = tuple(map(lambda path: vault.get_secrets_by_path(path=path), secret_wildcard_paths)) #-> generator of tuples with secrets
-vault_secrets_casual_raw = map(vault.get_secrets_by_path, secret_casual_paths) #-> generator of secrets
+vault_secrets_wildcard_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_wildcard_paths) #-> generator of tuples with secrets
+vault_secrets_casual_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_casual_paths) #-> generator of secrets
 
 vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
 vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
+
 #merge wildcard and casual generators to one tuple
 vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
 
 #remove False requests
-vault_secrets = tuple(filter(lambda secret: secret,vault_secrets))
+vault_secrets = tuple(filter(lambda secret: secret, vault_secrets))
 
 #filter vault secrets
 valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
@@ -137,5 +141,7 @@ for inv_s in invalid_vault_secrets:
     system_logger.warning(f'{inv_s.full_path} is invalid. Upload aborted')
 
 #creating k8s secrets from vault objects
-# list(map(k8s_Secret.upload_vault_secret, valid_vault_secrets))
-# k8s_Secret.remove_untrackable_secrets()
+list(map(lambda secret: k8s_injector.upload_secret(secret_name=secret.secret_name, 
+                                                    secret_data=secret.secret_data), valid_vault_secrets))
+k8s_injector.remove_unprocessed_secrets()
+#k8s_Secret.remove_untrackable_secrets()

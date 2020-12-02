@@ -52,7 +52,7 @@ class VaultOperator:
         else:
             return f"Token policies - {str(token_info.json()['data']['policies'])}"
 
-    @vault_log.info(on_error='No such KV engine [[kv_mount]]. Skipped', template_kvargs=True)
+    @vault_log.info(on_error='No such KV engine [[[kv_mount]]]. Skipped', template_kvargs=True)
     def get_kv_mount_version(self, *, kv_mount):
         kv_mount_version = self.mounts_info[f'{kv_mount}/']['options']['version']
         return kv_mount_version
@@ -120,7 +120,7 @@ class VaultOperator:
         if not kv_mount_version:
             return False
         
-        pull_api_endpoint = '/data' if kv_mount == '2' else ''
+        pull_api_endpoint = '/data' if kv_mount_version == '2' else ''
         secret_response = requests.get(f'{self.address}/v1/{kv_mount}{pull_api_endpoint}/{kv_mountless}', 
                                                                                     headers={'X-Vault-Token': self.token},
                                                                                     verify=self.verify_ssl)
