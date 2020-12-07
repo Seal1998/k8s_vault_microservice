@@ -54,6 +54,8 @@ class VaultOperator:
 
     @vault_log.info(on_error='No such KV engine [[[kv_mount]]]. Skipped', template_kvargs=True)
     def get_kv_mount_version(self, *, kv_mount):
+        if f'{kv_mount}/' not in self.mounts_info.keys():
+            return False
         kv_mount_version = self.mounts_info[f'{kv_mount}/']['options']['version']
         return kv_mount_version
 
@@ -118,6 +120,7 @@ class VaultOperator:
 
         kv_mount_version = self.get_kv_mount_version(kv_mount=kv_mount)
         if not kv_mount_version:
+            vault_log.log_msg(logging.ERROR, f'No kv engine [{kv_mount}]. Skipping')
             return False
         
         pull_api_endpoint = '/data' if kv_mount_version == '2' else ''

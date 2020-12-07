@@ -44,7 +44,7 @@ class KubeInjector:
                 else:
                     replaced_labels_dict = self.injector_label_dict
                     #removing secret from injector managed list
-                    self.injector_managed_secrets.remove(secret_name)
+                    self.injector_managed_secrets.remove(secret_name) #marking secret as processed
 
                 if self.__secrets_equivalence(existing_secret.data, secret_data):
                     return 'The secret already exists and has not changed'
@@ -54,7 +54,7 @@ class KubeInjector:
                     return f'Secret exists and replaced with new version. Keys - {str([key for key in secret_data.keys()])}'
             else:
                 replaced_labels_dict = self.injector_label_dict
-                self.secret_op.replace_secret(secret_name=secret_name, data_dict=existing_secret.data, 
+                self.secret_op.replace_secret(secret_name=secret_name, data_dict=secret_data, 
                                                                 label_dict=replaced_labels_dict)
                 return 'Secret exists but do not managing by any vault-injector. Labling with current vault-injector labels'
     

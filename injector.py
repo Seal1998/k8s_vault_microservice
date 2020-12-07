@@ -55,6 +55,35 @@ def load_environment():
 
     return variables
 
+def process_secrets_path(path_to_secrets):
+    secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), path_to_secrets)
+    secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), path_to_secrets)
+    vault_secrets_wildcard_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_wildcard_paths) #-> generator of tuples with secrets
+    vault_secrets_casual_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_casual_paths) #-> generator of secrets
+
+    vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
+    vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
+
+    #merge wildcard and casual generators to one tuple
+    vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
+
+    #remove False requests
+    vault_secrets = tuple(filter(lambda secret: secret, vault_secrets))
+    if len(vault_secrets) == 0:
+        return False
+
+    #filter vault secrets
+    valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
+    invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
+
+    for inv_s in invalid_vault_secrets:
+        system_logger.warning(f'{inv_s.full_path} is invalid. Upload aborted')
+    
+    valid_secrets = tuple(valid_vault_secrets)
+    if len(valid_secrets) == 0:
+        return False
+    return valid_secrets
+
 #non k8s dev args
 try:# kostyl.py
     dev_vault_token = os.environ['DEV_VAULT_TOKEN']
@@ -112,36 +141,41 @@ elif paths_source.vault_secret:
         path_secret = path_secret
     secret_paths = path_secret.secret_data['vault-injector-paths']
 
-#exclude and not exclude paths
-secret_exclude_paths_raw = filter(lambda path: path[0]=='!', secret_paths)
-secret_non_exclude_paths = tuple(filter(lambda path: path[0]!='!', secret_paths))
+#get complex and non-complex secrets
+complex_secret_paths = tuple(filter(lambda secret: type(secret) is dict, secret_paths))
+simple_secret_paths = tuple(filter(lambda secret: type(secret) is not dict, secret_paths))
+
+
+system_logger.info('Processign complex secrets')
+for secret in complex_secret_paths:
+    if 'id' in secret.keys():
+        system_logger.info(f"Processign complex secret with id [{secret['id']}]")
+        if 'path' in secret.keys():
+            complex_secrets = process_secrets_path([secret['path']])
+            for complex_secret in complex_secrets:
+                #pipeline    
+                if 'exclude_keys' in secret.keys():
+                    for ex_key in secret['exclude_keys']:
+                        if ex_key in complex_secret.secret_data.keys():
+                            complex_secret.secret_data.pop(ex_key)
+        else:
+            system_logger.error(f"Complex secret with [id] [{secret['id']}] has no [path] field")
+    else:
+        system_logger.error(f"Complex secret without [id] field founded. Aborting upload")
+
+system_logger.info('Processign simple secrets')
+
+#exclude paths
+secret_exclude_paths_raw = filter(lambda path: path[0]=='!', simple_secret_paths)
 secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
 list(map(vault.exclude_secret, secret_exclude_paths))
 
+secret_non_exclude_paths = tuple(filter(lambda path: path[0]!='!', simple_secret_paths))
 #filter and proceed wildcard and casual paths
-secret_wildcard_paths = filter(lambda path: path[-1] in ('*','+'), secret_non_exclude_paths)
-secret_casual_paths = filter(lambda path: path[-1] not in ('*','+'), secret_non_exclude_paths)
-vault_secrets_wildcard_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_wildcard_paths) #-> generator of tuples with secrets
-vault_secrets_casual_raw = map(lambda path: vault.get_secrets_by_path(path=path), secret_casual_paths) #-> generator of secrets
-
-vault_secrets_wildcard = (secret for subtuple in vault_secrets_wildcard_raw if subtuple for secret in subtuple) #generator
-vault_secrets_casual = (secret for secret in vault_secrets_casual_raw) #generator
-
-#merge wildcard and casual generators to one tuple
-vault_secrets = (*vault_secrets_wildcard, *vault_secrets_casual) #tuple
-
-#remove False requests
-vault_secrets = tuple(filter(lambda secret: secret, vault_secrets))
-
-#filter vault secrets
-valid_vault_secrets = filter(lambda v_secret: validate_vault_secret(v_secret), vault_secrets)
-invalid_vault_secrets = filter(lambda v_secret: not validate_vault_secret(v_secret), vault_secrets)
-
-for inv_s in invalid_vault_secrets:
-    system_logger.warning(f'{inv_s.full_path} is invalid. Upload aborted')
+valid_secrets = process_secrets_path(secret_non_exclude_paths)
 
 #creating k8s secrets from vault objects
 list(map(lambda secret: k8s_injector.upload_secret(secret_name=secret.secret_name, 
-                                                    secret_data=secret.secret_data), valid_vault_secrets))
+                                                    secret_data=secret.secret_data), valid_secrets))
 k8s_injector.remove_unprocessed_secrets()
 #k8s_Secret.remove_untrackable_secrets()
