@@ -104,6 +104,8 @@ class VaultOperator:
             listed_secrets_paths = self.list_secrets_by_path_recurse(path=path)
         else:
             listed_secrets_paths = self.list_secrets_by_path(path=path)
+            if not listed_secrets_paths:
+                return False
             listed_secrets_paths = tuple(filter(lambda path: path[-1]!='/', listed_secrets_paths))
         wildcard_secrets = map(lambda path: self.get_single_secret(path=path), listed_secrets_paths)
 
@@ -139,8 +141,8 @@ class VaultOperator:
     def list_secrets_by_path(self, *, path=None, full_path=True):
         kv_mount, kv_mountless, _ = self.__split_path_by_parts(path)
         kv_mount_version = self.get_kv_mount_version(kv_mount=kv_mount)
-        if not kv_mount_version:
-            return False
+        # if not kv_mount_version:
+        #     return False
         list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
         listed_secrets_response = requests.request('LIST', f'{self.address}/v1/{kv_mount}{list_api_endpoint}/{kv_mountless}',
                                                                                                 headers={'X-Vault-Token': self.token},

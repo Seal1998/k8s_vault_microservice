@@ -50,7 +50,8 @@ class KubeSecretOperator:
     @k8s_log.info(msg='Getting [[[secret_name]]] secret', template_kvargs=True)
     def get_secret(self, secret_name):
         secret = self.API_CoreV1.read_namespaced_secret(namespace=self.namespace, name=secret_name)
-        secret.data = {key: base64_decode_string(value) for key, value in secret.data.items()} #decoding secret data dict
+        if secret.data:
+            secret.data = {key: base64_decode_string(value) for key, value in secret.data.items()} #decoding secret data dict
         return secret
 
     @k8s_log.info(msg='Creating new [[[secret_name]]] secret', template_kvargs=True)

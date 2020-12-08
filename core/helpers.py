@@ -11,8 +11,9 @@ def base64_decode_string(string):
 
 def sort_dict_alphabetical_keys(dictionary):
     new_dict = {}
-    for sorted_key in sorted(dictionary.keys()):
-        new_dict[sorted_key] = dictionary[sorted_key]
+    if type(dictionary) is dict:
+        for sorted_key in sorted(dictionary.keys()):
+            new_dict[sorted_key] = dictionary[sorted_key]
     return new_dict
 
 def unwrap_response(response):
