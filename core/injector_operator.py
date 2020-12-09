@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from types import SimpleNamespace
 from core.helpers import validate_vault_secret
 from core.logging import system_logger
@@ -31,7 +31,6 @@ class InjectorOperator:
         required_fields = tuple(['path', 'id'])
         for complex_secret in self.config.complex_secrets_paths:
             if all(field in complex_secret.keys() for field in required_fields):
-                
                 if type(complex_secret['path']) is str:
                     secret_path_raw = self.process_secret_path(complex_secret['path'])
                 elif type(complex_secret['path']) is list:
@@ -59,38 +58,72 @@ class InjectorOperator:
         for secret in self.secrets:
             self.k8s.upload_secret(secret_name=secret.secret_name, secret_data=secret.secret_data)
 
+#configs
     def load_vault_config_secret(self, secret_path):
-        system_logger.info('Loading secrets via Vault secret paths source')
+        self.config.simple_secrets_paths = []
+        self.config.complex_secrets_paths = []
+
+        system_logger.info('Loading config via Vault secret paths source')
         config_secret = self.vault.get_secrets_by_path(path=secret_path)
         if not config_secret:
-            system_logger.info('Cannot pull paths from Vault')
+            system_logger.info('Cannot pull config from Vault')
             exit(1)
-        elif 'vault-injector-paths' not in config_secret.secret_data.keys():
-            system_logger.info('Config secret does not contain [vault-injector-paths] field')
-            exit(1)
-        
-        vault_injector_paths = config_secret.secret_data['vault-injector-paths']
+        else:
+            config_secret = config_secret.secret_data
 
-        self.config.simple_secrets_paths = tuple(filter(lambda s: type(s) is not dict, vault_injector_paths))
-        self.config.complex_secrets_paths = tuple(filter(lambda s: type(s) is dict, vault_injector_paths))
+        injector_config = defaultdict(list)
+
+        #processing child configs
+        if 'injector-configs' in config_secret.keys() and \
+                type(config_secret['injector-configs']) is list:
+            config_secrets = tuple(c.secret_data for c \
+                                    in self.process_secret_paths_iter(config_secret['injector-configs'], skip_verify=True) if c)
+
+            for config in config_secrets:
+                injector_config = self.merge_configs(injector_config, config)
+        
+            #remove injector-configs key in order to skip it. Actually not need to do so, but why not?
+            del config_secret['injector-configs']
+
+        injector_config = self.merge_configs(injector_config, config_secret)
+
+        
+
+        if 'vault-injector-paths' in injector_config.keys():
+            vault_injector_paths = injector_config['vault-injector-paths']
+
+            self.config.simple_secrets_paths = [*self.config.simple_secrets_paths, *list(filter(lambda s: type(s) is not dict, vault_injector_paths))]
+            self.config.complex_secrets_paths = [*self.config.complex_secrets_paths, *list(filter(lambda s: type(s) is dict, vault_injector_paths))]
 
     def load_k8s_config_configmap(self, configmap_name):
         return False
 
-    def process_secret_paths_iter(self, secret_paths):
-        secrets_raw = (secret for secret_tuple in map(self.process_secret_path, secret_paths) for secret in secret_tuple)
+    def merge_configs(self, first_config, second_config):
+        for key, value in second_config.items():
+            if type(value) is dict:
+                if not first_config[key]:
+                    first_config[key] = {} #if no such key - create it. Need for unpacking
+                first_config[key] = {**first_config[key], **value}
+            elif type(value) is list:
+                first_config[key] = [*first_config[key], *value]
+        
+        return first_config
+
+    def process_secret_paths_iter(self, secret_paths, skip_verify=False):
+        secrets_raw = (secret for secret_tuple in map(lambda p: self.process_secret_path(p, skip_verify), secret_paths) 
+                                                                                                for secret in secret_tuple)
         return tuple(filter(lambda s: s is not False, secrets_raw))
 
-    def process_secret_path(self, secret_path):
+    def process_secret_path(self, secret_path, skip_verify=False):
         if secret_path[-1] in ('*','+'):
-            secret_path_secrets = self.process_wildcard_secret_path(secret_path)
+            secret_path_secrets = self.process_wildcard_secret_path(secret_path, skip_verify)
             secret_path_secrets = tuple(filter(lambda s: s is not False, secret_path_secrets))
             if len(secret_path_secrets) == 0:
                 return ()
         else:
-            secret_path_secrets = self.process_casual_secret_path(secret_path)
+            secret_path_secrets = self.process_casual_secret_path(secret_path, skip_verify)
             if not secret_path_secrets:
-                return False
+                return ()
             else:
                 secret_path_secrets = tuple([secret_path_secrets])
         
@@ -103,15 +136,20 @@ class InjectorOperator:
         else:
             return True
 
-    def process_wildcard_secret_path(self, wildcard_path):
+    def process_wildcard_secret_path(self, wildcard_path, skip_verify):
         vault_secrets_wildcard_raw = self.vault.get_secrets_by_path(path=wildcard_path)
         if not vault_secrets_wildcard_raw:
             return ()
-        vault_secrets_wildcard = tuple(filter(lambda s: self.validate_secret(s), vault_secrets_wildcard_raw))
+        elif not skip_verify:
+            vault_secrets_wildcard = tuple(filter(lambda s: self.validate_secret(s), vault_secrets_wildcard_raw))
+        elif skip_verify:
+            vault_secrets_wildcard = vault_secrets_wildcard_raw
         return vault_secrets_wildcard
 
-    def process_casual_secret_path(self, casual_path):
+    def process_casual_secret_path(self, casual_path, skip_verify):
         vault_secret_casual_raw = self.vault.get_secrets_by_path(path=casual_path)
-        if not self.validate_secret(vault_secret_casual_raw) or not vault_secret_casual_raw:
+        if not vault_secret_casual_raw:
+            return False
+        elif not skip_verify and not self.validate_secret(vault_secret_casual_raw):
             return False
         return vault_secret_casual_raw

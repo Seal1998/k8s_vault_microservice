@@ -48,10 +48,10 @@ def load_environment():
         system_logger.error('Config sources not specified. Specify VAULT_SECRET_CONFIG or VAULT_CONFIGMAP_CONFIG')
         exit(1)
     elif 'VAULT_SECRET_CONFIG' in env.keys():
-        system_logger.info('Using path file as Vault paths source')
+        system_logger.info('Using Vault secret as Vault-Injector configuration source')
         variables.append(ConfigSource(vault_config_path=env['VAULT_SECRET_CONFIG']))
     elif 'VAULT_CONFIGMAP_CONFIG' in env.keys():
-        system_logger.info('Using Vault secret as Vault paths source')
+        system_logger.info('Using k8s configmap as Vault-Injector configuration source')
         variables.append(ConfigSource(k8s_configmap_name=env['VAULT_CONFIGMAP_CONFIG']))
 
     return variables

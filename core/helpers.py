@@ -24,6 +24,8 @@ def unwrap_response(response):
     return status_code, request_type, request_url, response_text
 
 def validate_vault_secret(vault_secret):
+    if not vault_secret:
+        return False
     str_type_check = all(type(value) is str for value in vault_secret.secret_data.values())
     #check for dns valid name
     dns_match = re.fullmatch('([a-zA-Z\d]+[\.-]{0,1})+[a-zA-Z\d]+', vault_secret.secret_name) #None if not fullmatch
