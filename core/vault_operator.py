@@ -99,7 +99,7 @@ class VaultOperator:
             return vault_secrets
         else:
             vault_secret = self.get_single_secret(path=path)
-            if vault_secret is None: # prevent None return
+            if not vault_secret: # prevent None return
                 return False
             return vault_secret
 
@@ -166,7 +166,7 @@ class VaultOperator:
         listed_secrets = self.list_secrets_by_path(path=path, full_path=full_path) #CAN RETURN FALSE!!!
 
         if not listed_secrets:
-            return ()
+            return False
         listed_secrets_dir = filter(lambda path: path and path[-1]=='/', listed_secrets)
         listed_secrets_casual = filter(lambda path: path and path[-1]!='/', listed_secrets)
 

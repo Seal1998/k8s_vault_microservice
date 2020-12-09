@@ -23,6 +23,9 @@ class InjectorOperator:
             self.load_k8s_config_configmap(k8s_configmap_config)
 
 #workflow
+    def process_excluded_secrets(self):
+        list(map(lambda p: self.vault.exclude_secret(path=p), self.config.exclude_secrets_paths))
+
     def process_simple_secrets(self):
         self.secrets = [*self.secrets, *self.process_secret_paths_iter(self.config.simple_secrets_paths)]
 
@@ -44,6 +47,9 @@ class InjectorOperator:
 
         self.secrets = [*self.secrets, *complex_secrets]
 
+    def clean_up(self):
+        self.k8s.remove_unprocessed_secrets()
+
 #operations
 
     def process_complex_secret_pipe(self, vault_secret, complex_secret):
@@ -60,9 +66,6 @@ class InjectorOperator:
 
 #configs
     def load_vault_config_secret(self, secret_path):
-        self.config.simple_secrets_paths = []
-        self.config.complex_secrets_paths = []
-
         system_logger.info('Loading config via Vault secret paths source')
         config_secret = self.vault.get_secrets_by_path(path=secret_path)
         if not config_secret:
@@ -91,9 +94,23 @@ class InjectorOperator:
 
         if 'vault-injector-paths' in injector_config.keys():
             vault_injector_paths = injector_config['vault-injector-paths']
+            self.__load_vault_injector_paths(vault_injector_paths)
+            
 
-            self.config.simple_secrets_paths = [*self.config.simple_secrets_paths, *list(filter(lambda s: type(s) is not dict, vault_injector_paths))]
-            self.config.complex_secrets_paths = [*self.config.complex_secrets_paths, *list(filter(lambda s: type(s) is dict, vault_injector_paths))]
+    def __load_vault_injector_paths(self, vault_injector_paths):
+        self.config.exclude_secrets_paths = []
+        for path in vault_injector_paths:
+            if type(path) is str:
+                if path[0] == '!':
+                    self.config.exclude_secrets_paths.append(path[1:])
+                    vault_injector_paths.remove(path)
+
+        self.config.simple_secrets_paths = list(filter(lambda s: type(s) is not dict, vault_injector_paths))
+        self.config.complex_secrets_paths = list(filter(lambda s: type(s) is dict, vault_injector_paths))
+
+        # secret_exclude_paths_raw = filter(lambda path: path[0]=='!', simple_secret_paths)
+        # secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
+        # list(map(vault.exclude_secret, secret_exclude_paths))
 
     def load_k8s_config_configmap(self, configmap_name):
         return False
@@ -117,8 +134,7 @@ class InjectorOperator:
     def process_secret_path(self, secret_path, skip_verify=False):
         if secret_path[-1] in ('*','+'):
             secret_path_secrets = self.process_wildcard_secret_path(secret_path, skip_verify)
-            secret_path_secrets = tuple(filter(lambda s: s is not False, secret_path_secrets))
-            if len(secret_path_secrets) == 0:
+            if not secret_path_secrets:
                 return ()
         else:
             secret_path_secrets = self.process_casual_secret_path(secret_path, skip_verify)
@@ -139,8 +155,11 @@ class InjectorOperator:
     def process_wildcard_secret_path(self, wildcard_path, skip_verify):
         vault_secrets_wildcard_raw = self.vault.get_secrets_by_path(path=wildcard_path)
         if not vault_secrets_wildcard_raw:
-            return ()
-        elif not skip_verify:
+            return False
+        else:
+            vault_secrets_wildcard_raw = tuple(filter(lambda s: s is not False, vault_secrets_wildcard_raw))#filter False response from vault-operator
+
+        if not skip_verify:
             vault_secrets_wildcard = tuple(filter(lambda s: self.validate_secret(s), vault_secrets_wildcard_raw))
         elif skip_verify:
             vault_secrets_wildcard = vault_secrets_wildcard_raw
