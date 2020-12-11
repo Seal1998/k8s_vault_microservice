@@ -23,13 +23,12 @@ class Log:
 
     def __k8s_exception_handler(self, exception):
         self.log_msg(logging.ERROR, exception)
-        print(type(exception), traceback.format_exc())
 
     def __vault_exception_handler(self, exception):
         if type(exception) is VaultException:
             self.log_msg(logging.ERROR, exception.log_str())
         else:
-            print(type(exception), traceback.format_exc())
+            self.log_msg(logging.ERROR, exception)
 
     def log_msg(self, log_level=logging.INFO, msg=None):
         self.logger.log(log_level, msg)
@@ -53,10 +52,10 @@ class Log:
                 if template_kvargs:
                     on_error = self.template_log_record(on_error, event_kvargs)
                 self.log_msg(logging.ERROR, on_error)
+            if print_exception:
+                print(type(ex), traceback.format_exc())
             if fatal:
                 exit(1)
-            if print_exception:
-                self.log_msg(logging.ERROR, ex)
 
     def warning(self, func=None, **log_kvargs):
         def warning_decorator(function):

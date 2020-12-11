@@ -20,5 +20,3 @@ system_stream.setFormatter(system_formatter)
 vault_logger.addHandler(vault_stream)
 k8s_logger.addHandler(k8s_stream)
 system_logger.addHandler(system_stream)
-
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO, filename='../templog')

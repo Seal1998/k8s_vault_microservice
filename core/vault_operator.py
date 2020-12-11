@@ -37,7 +37,7 @@ class VaultOperator:
             return mounts_info_response.json()
 
     @vault_log.info(msg='Checking HC Vault connection to [[address]]...', on_success='OK', fatal=True, 
-                                                            print_exception=True, template_kvargs=True)
+                                                            template_kvargs=True)
     def check_vault_connection(self, *, timeout=10, address=None):
         check_response = requests.get(f'{self.address}/v1/sys/health', verify=self.verify_ssl, timeout=timeout)
         if check_response.status_code != 200:
