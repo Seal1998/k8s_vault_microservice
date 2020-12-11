@@ -1,5 +1,8 @@
 __pycache__/
+.vscode/
 env/
 secrets/
 *.log
 hc_path
+tests/*
+export_globals.sh
