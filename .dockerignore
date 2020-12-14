@@ -1,0 +1,9 @@
+env/
+k8s_objects/
+.git/
+.vscode/
+__pycache__/
+export_globals.sh
+Dockerfile
+.gitignore
+.dockerignore
