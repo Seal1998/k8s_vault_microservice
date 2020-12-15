@@ -4,9 +4,9 @@ COPY requirements.txt /injector/
 
 RUN adduser -s /bin/false -S -D -H injector && \
     apk add python3 py3-pip && \
-    pip3 install -r /injector/requirements.txt
+    pip3 install --trusted-host pypi.org -r /injector/requirements.txt
 
-COPY . /injector/
+COPY --chown=injector:root . /injector/
 
 WORKDIR /injector
 USER injector
