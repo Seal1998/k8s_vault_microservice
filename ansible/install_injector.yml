@@ -1,0 +1,81 @@
+################
+# - vars:
+#     namespace
+################
+- hosts: localhost
+  gather_facts: false
+  tasks:
+
+    - name: Create vault-injector ServiceAccount
+      k8s:
+        state: present
+        namespace: '{{ namespace }}'
+        definition:
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: vault-injector
+
+    - name: Create secrets-operator role
+      k8s:
+        state: present
+        namespace: '{{ namespace }}'
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: secrets-operator
+          rules:
+          - apiGroups: [""]
+            resources: ["secrets"]
+            verbs: ["get", "watch", "list", "create", "update", "patch", "delete"]
+
+    - name: Create namespace-reader role
+      k8s:
+        state: present
+        namespace: '{{ namespace }}'
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: namespace-reader
+          rules:
+          - apiGroups: [""]
+            resources: ["namespaces"]
+            verbs: ["get"]
+
+    - name: Bind vault-injector service account to the roles
+      block:
+        - name: Binding vault-injector to the secrets-operator role
+          k8s:
+            state: present
+            namespace: '{{ namespace }}'
+            definition:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: vault-injector-secrets-operator
+              subjects:
+              - kind: ServiceAccount
+                name: vault-injector
+              roleRef:
+                kind: Role
+                name: secrets-operator
+                apiGroup: rbac.authorization.k8s.io
+
+        - name: Binding vault-injector to the namespace-reader role
+          k8s:
+            state: present
+            namespace: '{{ namespace }}'
+            definition:
+              apiVersion: rbac.authorization.k8s.io/v1
+              kind: RoleBinding
+              metadata:
+                name: vault-injector-namespace-reader
+              subjects:
+              - kind: ServiceAccount
+                name: vault-injector
+              roleRef:
+                kind: Role
+                name: namespace-reader
+                apiGroup: rbac.authorization.k8s.io

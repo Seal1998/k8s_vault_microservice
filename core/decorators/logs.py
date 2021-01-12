@@ -56,6 +56,8 @@ class Log:
                 print(type(ex), traceback.format_exc())
             if fatal:
                 exit(1)
+            else:
+                return False #Failed function return false
 
     def warning(self, func=None, **log_kvargs):
         def warning_decorator(function):

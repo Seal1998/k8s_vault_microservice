@@ -67,7 +67,8 @@ class InjectorOperator:
 #configs
     def load_vault_config_secret(self, secret_path):
         system_logger.info('Loading config via Vault secret paths source')
-        config_secret = self.vault.get_secrets_by_path(path=secret_path)
+        #config_secret = self.vault.get_secrets_by_path(path=secret_path)
+        config_secret = self.process_secret_path(secret_path, skip_verify=True)[0]
         if not config_secret:
             system_logger.info('Cannot pull config from Vault')
             exit(1)
@@ -88,7 +89,7 @@ class InjectorOperator:
             #remove injector-configs key in order to skip it. Actually not need to do so, but why not?
             del config_secret['injector-configs']
 
-        injector_config = self.merge_configs(injector_config, config_secret)
+        injector_config = self.merge_configs(injector_config, config_secret) #merge root config with merged injector-configs
 
         
 
@@ -156,8 +157,6 @@ class InjectorOperator:
         vault_secrets_wildcard_raw = self.vault.get_secrets_by_path(path=wildcard_path)
         if not vault_secrets_wildcard_raw:
             return False
-        else:
-            vault_secrets_wildcard_raw = tuple(filter(lambda s: s is not False, vault_secrets_wildcard_raw))#filter False response from vault-operator
 
         if not skip_verify:
             vault_secrets_wildcard = tuple(filter(lambda s: self.validate_secret(s), vault_secrets_wildcard_raw))
