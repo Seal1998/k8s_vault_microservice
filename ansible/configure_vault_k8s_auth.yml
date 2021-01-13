@@ -1,15 +1,14 @@
 ################
 # - vars:
+#     namespace
 #     vault_token
 #     auth_engine_name
+#     vault_api_addr
+#     k8s_api_addr
 ################
 
 - hosts: localhost
   gather_facts: false
-  vars:
-    namespace: kube-system
-    vault_token: 
-    vault_addr:
   tasks:
     - name: Creating hvault-auth-delegator ServiceAccount
       k8s:
@@ -32,7 +31,7 @@
           subjects:
           - kind: ServiceAccount
             name: hvault-auth-delegator
-            namespace: '{{ namespace }}'
+            namespace: kube-system
           roleRef:
             apiGroup: rbac.authorization.k8s.io
             kind: ClusterRole
@@ -41,14 +40,14 @@
 
     - name: Gettign hvault-auth-delegator ServiceAccount from kube-system namespace
       k8s_info:
-        namespace: '{{ namespace }}'
+        namespace: kube-system
         name: 'hvault-auth-delegator'
         kind: ServiceAccount
       register: vault_sa
 
     - name: Getting hvault-auth-delegator ServiceAccount Secret
       k8s_info:
-        namespace: '{{ namespace }}'
+        namespace: kube-system
         name: '{{ vault_sa.resources[0].secrets[0].name }}'
         kind: Secret
       register: vault_sa_token_secret
@@ -58,8 +57,34 @@
         ca_cert: "{{ vault_sa_token_secret.resources[0].data['ca.crt'] | b64decode }}"
         k8s_token: "{{ vault_sa_token_secret.resources[0].data['token'] | b64decode }}"
 
-    - name: Making request to the Vault
+    - name: 'Enable k8s auth engine at path /{{ auth_engine_name }}'
+      uri:
+        url: '{{ vault_api_addr }}/v1/sys/auth/{{ auth_engine_name }}'
+        method: POST
+        headers:
+          X-Vault-Token: '{{ vault_token }}'
+        body_format: json
+        body:
+          type: kubernetes
+        status_code:
+          - 200
+          - 204
 
+    - name: 'Configure k8s auth engine at path /{{ auth_engine_name }}'
+      uri:
+        url: '{{ vault_api_addr }}/v1/auth/{{ auth_engine_name }}/config'
+        method: POST
+        headers:
+          X-Vault-Token: '{{ vault_token }}'
+        body_format: json
+        body:
+          kubernetes_host: '{{ k8s_api_addr }}'
+          kubernetes_ca_cert: '{{ ca_cert }}'
+          token_reviewer_jwt: '{{ k8s_token }}'
+        status_code:
+          - 200
+          - 204
+          
 # {
 #             "apiVersion": "v1",
 #             "kind": "ServiceAccount",

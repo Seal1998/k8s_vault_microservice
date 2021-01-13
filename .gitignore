@@ -6,3 +6,4 @@ secrets/
 hc_path
 tests/*
 export_globals.sh
+inventory
