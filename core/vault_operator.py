@@ -96,10 +96,15 @@ class VaultOperator:
             vault_secrets = self.get_wildcard_secrets(path=path,recursively=(secret_name=='*'))
             if not vault_secrets:
                 return False
-            return vault_secrets
+            else:
+                vault_secrets = tuple(filter(lambda s: s is not False, vault_secrets))#filter False responses
+                if len(vault_secrets) == 0:
+                    return False
+                else:
+                    return vault_secrets
         else:
             vault_secret = self.get_single_secret(path=path)
-            if not vault_secret: # prevent None return
+            if not vault_secret: #if False => return False
                 return False
             return vault_secret
 
@@ -112,7 +117,7 @@ class VaultOperator:
         if not listed_secrets_paths:
             return False
             
-        listed_secrets_paths = tuple(filter(lambda path: path[-1]!='/', listed_secrets_paths))
+        listed_secrets_paths = tuple(filter(lambda path: path[-1]!='/', listed_secrets_paths))# remove directories/ from listed secrets
         wildcard_secrets = map(lambda path: self.get_single_secret(path=path), listed_secrets_paths)
 
         return (*wildcard_secrets,)

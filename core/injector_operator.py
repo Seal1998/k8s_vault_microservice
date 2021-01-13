@@ -27,9 +27,11 @@ class InjectorOperator:
         list(map(lambda p: self.vault.exclude_secret(path=p), self.config.exclude_secrets_paths))
 
     def process_simple_secrets(self):
+        system_logger.info('Processing simple secrets...')
         self.secrets = [*self.secrets, *self.process_secret_paths_iter(self.config.simple_secrets_paths)]
 
     def process_complex_secrets(self):
+        system_logger.info('Processing complex secrets...')
         complex_secrets = []
         required_fields = tuple(['path', 'id'])
         for complex_secret in self.config.complex_secrets_paths:
@@ -67,12 +69,13 @@ class InjectorOperator:
 #configs
     def load_vault_config_secret(self, secret_path):
         system_logger.info('Loading config via Vault secret paths source')
-        config_secret = self.vault.get_secrets_by_path(path=secret_path)
-        if not config_secret:
+        #config_secret = self.vault.get_secrets_by_path(path=secret_path)
+        config_secret = self.process_secret_path(secret_path, skip_verify=True)
+        if len(config_secret) == 0:
             system_logger.info('Cannot pull config from Vault')
             exit(1)
         else:
-            config_secret = config_secret.secret_data
+            config_secret = config_secret[0].secret_data
 
         injector_config = defaultdict(list)
 
@@ -88,7 +91,7 @@ class InjectorOperator:
             #remove injector-configs key in order to skip it. Actually not need to do so, but why not?
             del config_secret['injector-configs']
 
-        injector_config = self.merge_configs(injector_config, config_secret)
+        injector_config = self.merge_configs(injector_config, config_secret) #merge root config with merged injector-configs
 
         
 
@@ -156,8 +159,6 @@ class InjectorOperator:
         vault_secrets_wildcard_raw = self.vault.get_secrets_by_path(path=wildcard_path)
         if not vault_secrets_wildcard_raw:
             return False
-        else:
-            vault_secrets_wildcard_raw = tuple(filter(lambda s: s is not False, vault_secrets_wildcard_raw))#filter False response from vault-operator
 
         if not skip_verify:
             vault_secrets_wildcard = tuple(filter(lambda s: self.validate_secret(s), vault_secrets_wildcard_raw))

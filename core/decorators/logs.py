@@ -21,6 +21,10 @@ class Log:
         k8s_logger.exception_handler = k8s_logger.__k8s_exception_handler
         return k8s_logger
 
+    @classmethod
+    def create_system_logger(cls):
+        system_logger = cls('__system__')
+
     def __k8s_exception_handler(self, exception):
         self.log_msg(logging.ERROR, exception)
 
@@ -56,6 +60,8 @@ class Log:
                 print(type(ex), traceback.format_exc())
             if fatal:
                 exit(1)
+            else:
+                return False #Failed function return false
 
     def warning(self, func=None, **log_kvargs):
         def warning_decorator(function):
