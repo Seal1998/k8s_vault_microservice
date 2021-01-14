@@ -1,4 +1,4 @@
-import os
+import os, urllib3
 from core.logging import system_logger
 from collections import namedtuple
 from kubernetes import config
@@ -55,6 +55,9 @@ def load_environment():
         variables.append(ConfigSource(k8s_configmap_name=env['VAULT_CONFIGMAP_CONFIG']))
 
     return variables
+
+#disable self signed certificate warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #non k8s dev args
 try:# kostyl.py
