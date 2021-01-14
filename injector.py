@@ -20,7 +20,8 @@ def load_environment():
                     ]
     optional_vars = [
                         'VAULT_INJECTOR_ID',
-                        'VAULT_K8S_AUTH_MOUNT'
+                        'VAULT_K8S_AUTH_MOUNT',
+                        'VAULT_NAMESPACE'
                     ]
     config_source_vars = [
                         'VAULT_SECRET_CONFIG', 
@@ -72,6 +73,7 @@ except:
     vault_role,
     vault_injector_id,
     vault_k8s_auth_mount,
+    vault_namespace,
     config_source        ] = load_environment()
 
 vault_operator = VaultOperator(address=vault_address, verify_ssl=False)
@@ -88,7 +90,7 @@ else:
     k8s_jwt_token = get_pod_jwt()
     #vault
     vault_operator.prepare_connection(vault_k8s_role=vault_role, k8s_jwt_token=k8s_jwt_token,
-                            vault_k8s_auth_mount=vault_k8s_auth_mount)
+                            vault_k8s_auth_mount=vault_k8s_auth_mount, vault_namespace=vault_namespace)
 
 
 

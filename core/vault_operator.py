@@ -60,11 +60,17 @@ class VaultOperator:
         return kv_mount_version
 
     @vault_log.info(msg='Preparing HC Vault connection')
-    def prepare_connection(self, *, vault_k8s_role=None, k8s_jwt_token=None, vault_k8s_auth_mount=None, vault_token=None):
+    def prepare_connection(self, *, vault_k8s_role=None, k8s_jwt_token=None, vault_k8s_auth_mount=None, vault_token=None, vault_namespace=None):
         self.check_vault_connection(address=self.address)
         if not vault_k8s_auth_mount:
             #use default mount path
             vault_k8s_auth_mount = 'kubernetes'
+            
+        if not vault_namespace:
+            self.namespace = 'root'
+        else:
+            self.namespace = vault_namespace
+
         if not vault_token:
             self.login_kubernetes(k8s_role=vault_k8s_role, jwt_token=k8s_jwt_token, auth_mount=vault_k8s_auth_mount)
         else:
