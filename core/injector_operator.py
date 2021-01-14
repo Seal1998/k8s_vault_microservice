@@ -111,10 +111,6 @@ class InjectorOperator:
         self.config.simple_secrets_paths = list(filter(lambda s: type(s) is not dict, vault_injector_paths))
         self.config.complex_secrets_paths = list(filter(lambda s: type(s) is dict, vault_injector_paths))
 
-        # secret_exclude_paths_raw = filter(lambda path: path[0]=='!', simple_secret_paths)
-        # secret_exclude_paths = (path[1:] for path in secret_exclude_paths_raw)
-        # list(map(vault.exclude_secret, secret_exclude_paths))
-
     def load_k8s_config_configmap(self, configmap_name):
         return False
 
