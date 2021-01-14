@@ -7,5 +7,5 @@ vault_api_addr: http://192.168.49.3:8200
 vault_role_name: injector
 vault_config_secret: secrets/config/vault-injector-config
 k8s_api_addr: https://192.168.49.2:8443
-schecdule_pattern: "*/1 * * * *"
+schecdule_pattern: kub  
 injector_image: 192.168.49.4:5000/vault-injector:4.0.6

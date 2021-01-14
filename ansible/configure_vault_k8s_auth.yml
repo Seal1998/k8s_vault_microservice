@@ -50,7 +50,7 @@
 
     - name: Getting cluster info block
       block:
-      - name: Getting '{{ sa_name }}' ServiceAccount from kube-system namespace
+      - name: Getting '{{ sa_name }}' ServiceAccount from '{{ system_namespace }}' namespace
         k8s_info:
           context: '{{ k8s_context }}'
           namespace: '{{ system_namespace }}'
