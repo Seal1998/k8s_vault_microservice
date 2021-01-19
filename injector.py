@@ -83,7 +83,7 @@ if dev_mode:
     config.load_kube_config()
     vault_token = dev_vault_token
     k8s_namespace = dev_k8s_namespace
-    vault_operator.prepare_connection(vault_token=dev_vault_token)
+    vault_operator.prepare_connection(vault_token=dev_vault_token, vault_namespace=vault_namespace)
 else:
     config.load_incluster_config()
     k8s_namespace = get_pod_namespace()
