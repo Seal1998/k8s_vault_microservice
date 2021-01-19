@@ -29,12 +29,18 @@ class VaultOperator:
 
     @vault_log.info(msg='Getting mounts info', on_success='Success', fatal=True)
     def get_mounts_info(self):
-        mounts_info_response = requests.get(f'{self.address}/v1/sys/mounts', headers={'X-Vault-Token': self.token}, verify=self.verify_ssl)
+        mounts_info_response = requests.get(f'{self.address}/v1/sys/mounts', 
+                                                headers={'X-Vault-Token': self.token, 'X-Vault-Namespace': self.namespace}, 
+                                                verify=self.verify_ssl)
 
         if mounts_info_response.status_code != 200:
             raise VaultException(*unwrap_response(mounts_info_response))
         else:
-            return mounts_info_response.json()
+            if self.namespace != 'root':
+                mounts_info = mounts_info_response.json()['data'] #requests to the non root namespace mounts return response with nested data field (WHY?)
+            else:
+                mounts_info = mounts_info_response.json()
+            return mounts_info
 
     @vault_log.info(msg='Checking HC Vault connection to [[address]]...', on_success='OK', fatal=True, 
                                                             template_kvargs=True)
@@ -46,7 +52,8 @@ class VaultOperator:
     @vault_log.info(msg='Checking HC Vault token policies...', print_return=True)
     def check_vault_token_policies(self):
         token_info = requests.post(f'{self.address}/v1/auth/token/lookup', data={"token": self.token}, 
-                                    headers={'X-Vault-Token': self.token}, verify=self.verify_ssl)
+                                    headers={'X-Vault-Token': self.token, 'X-Vault-Namespace': self.namespace}, 
+                                    verify=self.verify_ssl)
         if token_info.status_code != 200:
             raise VaultException(*unwrap_response(token_info))
         else:
@@ -63,6 +70,7 @@ class VaultOperator:
     def prepare_connection(self, *, vault_k8s_role=None, k8s_jwt_token=None, vault_k8s_auth_mount=None, vault_token=None, vault_namespace=None):
         self.check_vault_connection(address=self.address)
         if not vault_k8s_auth_mount:
+            vault_log.log_msg(logging.INFO, 'Vault k8s engine not defined. Using default - kubernetes')
             #use default mount path
             vault_k8s_auth_mount = 'kubernetes'
             
@@ -70,6 +78,8 @@ class VaultOperator:
             self.namespace = 'root'
         else:
             self.namespace = vault_namespace
+
+        vault_log.log_msg(logging.INFO, f'Using Vault namespace - {self.namespace}')
 
         if not vault_token:
             self.login_kubernetes(k8s_role=vault_k8s_role, jwt_token=k8s_jwt_token, auth_mount=vault_k8s_auth_mount)
@@ -144,7 +154,7 @@ class VaultOperator:
         
         pull_api_endpoint = '/data' if kv_mount_version == '2' else ''
         secret_response = requests.get(f'{self.address}/v1/{kv_mount}{pull_api_endpoint}/{kv_mountless}', 
-                                                                                    headers={'X-Vault-Token': self.token},
+                                                                                    headers={'X-Vault-Token': self.token, 'X-Vault-Namespace': self.namespace},
                                                                                     verify=self.verify_ssl)
         if secret_response.status_code == 200:
             response_data = secret_response.json()['data'] if kv_mount_version == '1' else secret_response.json()['data']['data']
@@ -162,7 +172,7 @@ class VaultOperator:
         #     return False
         list_api_endpoint = '/metadata' if kv_mount_version == '2' else ''
         listed_secrets_response = requests.request('LIST', f'{self.address}/v1/{kv_mount}{list_api_endpoint}/{kv_mountless}',
-                                                                                                headers={'X-Vault-Token': self.token},
+                                                                                                headers={'X-Vault-Token': self.token, 'X-Vault-Namespace': self.namespace},
                                                                                                 verify=self.verify_ssl)
         if listed_secrets_response.status_code != 200:
             raise VaultException(*unwrap_response(listed_secrets_response))

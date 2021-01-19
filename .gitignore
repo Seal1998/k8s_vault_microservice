@@ -6,4 +6,5 @@ secrets/
 hc_path
 tests/*
 export_globals.sh
+.python-version
 inventory
