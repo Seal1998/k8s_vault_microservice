@@ -1,6 +1,5 @@
 env/
 k8s_objects/
-ansible/
 .git/
 .vscode/
 __pycache__/
