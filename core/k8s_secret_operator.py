@@ -9,18 +9,19 @@ k8s_log = Log.create_k8s_logger()
 
 class KubeSecretOperator:
 
-    def __init__(self, namespace):
+    def __init__(self, namespace, check_permissions=True):
         self.API_CoreV1 = client.CoreV1Api()
 
         self.namespace = namespace
 
         self.tpl_env = self.__get_template_env()
 
-        self.check_permissions()
+        if check_permissions:
+            self.check_permissions()
 
     @k8s_log.info(msg='Checking K8S permissions...', on_success='Permissions - OK', fatal=True, print_exception=True)
     def check_permissions(self):
-        #self.check_namespase() why?
+        self.check_namespase()
         listed_secrets = self.list_secrets()
         first_secret_name = listed_secrets[0].metadata.name
 
