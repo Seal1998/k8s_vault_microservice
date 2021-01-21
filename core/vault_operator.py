@@ -20,7 +20,9 @@ class VaultOperator:
     @vault_log.info(msg='Login via kubernetes method with [[k8s_role]] role', on_success='Success', fatal=True, template_kvargs=True)
     def login_kubernetes(self, *, k8s_role=None, jwt_token=None, auth_mount=None):
         auth_url = f'{self.address}/v1/auth/{auth_mount}/login'
-        token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token}, verify=self.verify_ssl)
+        token_responce = requests.post(auth_url, data={"role": k8s_role, "jwt": jwt_token}, 
+                                        verify=self.verify_ssl,
+                                        headers={'X-Vault-Namespace': self.namespace})
         token_responce_dict = token_responce.json()
         if token_responce.status_code != 200:
             raise VaultException(*unwrap_response(token_responce))
