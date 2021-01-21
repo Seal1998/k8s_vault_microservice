@@ -21,7 +21,7 @@ class KubeSecretOperator:
 
     @k8s_log.info(msg='Checking K8S permissions...', on_success='Permissions - OK', fatal=True, print_exception=True)
     def check_permissions(self):
-        self.check_namespase()
+        #self.check_namespase()
         listed_secrets = self.list_secrets()
         first_secret_name = listed_secrets[0].metadata.name
 
