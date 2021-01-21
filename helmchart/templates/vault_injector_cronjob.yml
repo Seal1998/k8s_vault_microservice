@@ -1,0 +1,17 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: vault-secrets-injector
+spec:
+  schedule: "{{ .Values.vault_injector.schedule }}"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          serviceAccountName: {{ .Values.vault_injector_sa.name }}
+          restartPolicy: Never
+          containers:
+{{- include "vault_injector_container" . | indent 12 }}

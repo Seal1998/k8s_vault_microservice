@@ -1,0 +1,16 @@
+vault_injector:
+  id: test
+  schedule: '*/1 * * * *'
+  image: 192.168.49.3:5000/vault-injector:4.1.2
+  config_secret: secrets/config/vault-injector-config
+
+schedule_first_job_immediately: true
+
+vault_injector_sa:
+  name: vault-injector
+
+vault_auth:
+  url: http://192.168.49.4:8200
+  mount: minikube-k8s
+  role_name: injector
+  namespace: root
