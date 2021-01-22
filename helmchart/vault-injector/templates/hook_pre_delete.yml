@@ -9,6 +9,10 @@ metadata:
 spec:
   serviceAccountName: {{ .Values.vault_injector_sa.name }}
   restartPolicy: Never
+  {{- if .Values.registry_secret }}
+  imagePullSecrets: 
+    - name: {{ .Values.registry_secret }}
+  {{- end }}
   containers:
     - name: vault-k8s-secrets-injector
       image: {{ .Values.vault_injector.image }}

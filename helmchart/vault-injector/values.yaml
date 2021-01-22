@@ -7,6 +7,8 @@ vault_injector:
 schedule_first_job_immediately: true # if true - post-install hook will be triggered to launch initial sync
 clean_up_secrets: true # if true - pre-delete hook will be triggered to delete all secrets with the injector label (vault-injector=<id>)
 
+registry_secret: regcred
+
 vault_injector_sa:
   name: vault-injector # name of sa for injector to create
 

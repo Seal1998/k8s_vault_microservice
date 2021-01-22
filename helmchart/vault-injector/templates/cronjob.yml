@@ -13,5 +13,9 @@ spec:
         spec:
           serviceAccountName: {{ .Values.vault_injector_sa.name }}
           restartPolicy: Never
+          {{- if .Values.registry_secret }}
+          imagePullSecrets: 
+            - name: {{ .Values.registry_secret }}
+          {{- end }}
           containers:
 {{- include "vault_injector_container" . | indent 12 }}
