@@ -1,5 +1,6 @@
 env/
 k8s_objects/
+helmchart/
 .git/
 .vscode/
 __pycache__/
