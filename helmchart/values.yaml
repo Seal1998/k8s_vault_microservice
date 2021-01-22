@@ -1,16 +1,17 @@
 vault_injector:
-  id: test
-  schedule: '*/1 * * * *'
-  image: 192.168.49.3:5000/vault-injector:4.1.2
-  config_secret: secrets/config/vault-injector-config
+#  id: test #id of injector
+  schedule: '*/1 * * * *' # cronjob schedule pattern
+  image: 192.168.49.3:5000/vault-injector:4.1.7 # vault-injector image to use
+  config_secret: secrets/config/vault-injector-config # path to config in HashiCorp Vault
 
-schedule_first_job_immediately: true
+schedule_first_job_immediately: true # if true - post-install hook will be triggered to launch initial sync
+clean_up_secrets: true # if true - pre-delete hook will be triggered to delete all secrets with the injector label (vault-injector=<id>)
 
 vault_injector_sa:
-  name: vault-injector
+  name: vault-injector # name of sa for injector to create
 
 vault_auth:
-  url: http://192.168.49.4:8200
-  mount: minikube-k8s
-  role_name: injector
-  namespace: root
+  url: http://192.168.49.4:8200 # HashiCorp API address
+  mount: minikube-k8s # k8s auth mount name
+  role_name: injector # k8s auth mount role to aquare
+  namespace: root # Vault namespace to log into

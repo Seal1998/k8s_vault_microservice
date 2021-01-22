@@ -1,0 +1,25 @@
+{{- if eq .Values.clean_up_secrets true }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault-secrets-injector-helm-hook-clean-up-{{ now | unixEpoch }}
+  annotations:
+    "helm.sh/hook": "pre-delete"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  serviceAccountName: {{ .Values.vault_injector_sa.name }}
+  restartPolicy: Never
+  containers:
+    - name: vault-k8s-secrets-injector
+      image: {{ .Values.vault_injector.image }}
+      command:
+        - 'python3'
+      args:
+        - 'delete_secrets_by_id.py'
+      workingDir: /injector 
+      {{- if .Values.vault_injector.id  }}
+      env:
+      - name: VAULT_INJECTOR_ID
+        value: {{ .Values.vault_injector.id }}
+      {{- end }}
+{{- end }}

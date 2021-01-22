@@ -2,7 +2,7 @@ apiVersion: v2
 name: Vault-Injector
 description: A Helm chart to install Vault-Injector
 type: application
-version: 0.0.1
+version: 1.0.0
 maintainers:
   - name: "Danil Skichko"
-appVersion: "4.1.1"
+appVersion: "4.1.7"
