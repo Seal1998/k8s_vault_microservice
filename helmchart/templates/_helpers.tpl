@@ -1,5 +1,5 @@
 {{- define "secrets_operator_role_name" }}
-name: {{ .Values.vault_injector_sa.name }}-secrets-operator-role
+{{- .Values.vault_injector_sa.name }}-secrets-operator-role
 {{- end }}
 
 {{- define "vault_injector_container" }}

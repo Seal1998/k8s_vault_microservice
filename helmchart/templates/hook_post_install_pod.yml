@@ -1,0 +1,35 @@
+{{- if .Values.false }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-injector-post-install-helm-hook-{{ now | unixEpoch }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": "before-hook-creation"
+spec:
+  ttlSecondsAfterFinished: 10
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: {{ .Values.vault_injector_sa.name }}
+      restartPolicy: Never
+      containers:
+{{- include "vault_injector_container" . | indent 8 }}
+{{- end }}
+
+---
+
+{{- if eq .Values.schedule_first_job_immediately true }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault-injector-post-install-helm-hook-{{ now | unixEpoch }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  serviceAccountName: {{ .Values.vault_injector_sa.name }}
+  restartPolicy: Never
+  containers:
+{{- include "vault_injector_container" . | indent 4 }}
+{{- end }}

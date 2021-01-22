@@ -1,5 +1,5 @@
 vault_injector:
-#  id: test #id of injector
+  id: test #id of injector
   schedule: '*/1 * * * *' # cronjob schedule pattern
   image: 192.168.49.3:5000/vault-injector:4.1.7 # vault-injector image to use
   config_secret: secrets/config/vault-injector-config # path to config in HashiCorp Vault

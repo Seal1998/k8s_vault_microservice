@@ -7,5 +7,5 @@ subjects:
   name: {{ .Values.vault_injector_sa.name }}
 roleRef:
   kind: Role
-{{- include "secrets_operator_role_name" . | indent 2 }}
+  name: {{ include "secrets_operator_role_name" . }}
   apiGroup: rbac.authorization.k8s.io
